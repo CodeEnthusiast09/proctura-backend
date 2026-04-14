@@ -1,0 +1,725 @@
+{
+  "info": {
+    "name": "Proctura Backend",
+    "description": "API collection for Proctura — multitenancy online coding exam platform",
+    "_postman_id": "proctura-backend-v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080/api/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "tenant_subdomain", "value": "unilag", "type": "string" },
+    { "key": "tenant_id", "value": "", "type": "string" },
+    { "key": "course_id", "value": "", "type": "string" },
+    { "key": "exam_id", "value": "", "type": "string" },
+    { "key": "question_id", "value": "", "type": "string" },
+    { "key": "test_case_id", "value": "", "type": "string" },
+    { "key": "submission_id", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.token) {",
+                  "  pm.collectionVariables.set('token', res.data.token);",
+                  "  console.log('Token saved:', res.data.token.substring(0, 20) + '...');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@proctura.com\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Register Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@unilag.edu\",\n  \"password\": \"Student@123\",\n  \"first_name\": \"Emeka\",\n  \"last_name\": \"Nwosu\",\n  \"matric_number\": \"CSC/2020/001\",\n  \"subdomain\": \"unilag\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lecturer@unilag.edu\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/forgot-password", "host": ["{{base_url}}"], "path": ["auth", "forgot-password"] }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<reset_token_from_email>\",\n  \"new_password\": \"NewPass@456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/reset-password", "host": ["{{base_url}}"], "path": ["auth", "reset-password"] }
+          }
+        },
+        {
+          "name": "Accept Invite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<invite_token_from_email>\",\n  \"first_name\": \"Chidi\",\n  \"last_name\": \"Okeke\",\n  \"password\": \"Lecturer@789\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/accept-invite", "host": ["{{base_url}}"], "path": ["auth", "accept-invite"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Super Admin — Tenants",
+      "item": [
+        {
+          "name": "Create Tenant (School)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.tenant) {",
+                  "  pm.collectionVariables.set('tenant_id', res.data.tenant.id);",
+                  "  pm.collectionVariables.set('tenant_subdomain', res.data.tenant.subdomain);",
+                  "  console.log('Tenant ID saved:', res.data.tenant.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"University of Lagos\",\n  \"subdomain\": \"unilag\",\n  \"admin_email\": \"admin@unilag.edu.ng\",\n  \"admin_first_name\": \"Chidi\",\n  \"admin_last_name\": \"Okeke\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/admin/tenants", "host": ["{{base_url}}"], "path": ["admin", "tenants"] }
+          }
+        },
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/tenants?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "tenants"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Tenant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"University of Lagos (Updated)\",\n  \"is_active\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/admin/tenants/{{tenant_id}}", "host": ["{{base_url}}"], "path": ["admin", "tenants", "{{tenant_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Tenant",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/admin/tenants/{{tenant_id}}", "host": ["{{base_url}}"], "path": ["admin", "tenants", "{{tenant_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "School Admin — Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Invite Lecturer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.user) {",
+                  "  pm.collectionVariables.set('user_id', res.data.user.id);",
+                  "  console.log('Invite token:', res.data.invite_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lecturer@unilag.edu.ng\",\n  \"first_name\": \"Ngozi\",\n  \"last_name\": \"Adeyemi\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/users/invite-lecturer", "host": ["{{base_url}}"], "path": ["users", "invite-lecturer"] }
+          }
+        },
+        {
+          "name": "Import Students (CSV)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "students.csv",
+                  "description": "CSV with columns: email, first_name, last_name, matric_number"
+                }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/users/import-students", "host": ["{{base_url}}"], "path": ["users", "import-students"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["users", "{{user_id}}"] }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["users", "{{user_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shared",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "List Courses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/courses?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["courses"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Exams",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/exams?course_id={{course_id}}&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["exams"],
+              "query": [
+                { "key": "course_id", "value": "{{course_id}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Exam",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lecturer — Courses",
+      "item": [
+        {
+          "name": "Create Course",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('course_id', res.data.id);",
+                  "  console.log('Course ID saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Data Structures and Algorithms\",\n  \"code\": \"CSC301\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/courses", "host": ["{{base_url}}"], "path": ["courses"] }
+          }
+        },
+        {
+          "name": "Update Course",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Data Structures\",\n  \"code\": \"CSC301\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/courses/{{course_id}}", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Course",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/courses/{{course_id}}", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lecturer — Exams",
+      "item": [
+        {
+          "name": "Create Exam",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('exam_id', res.data.id);",
+                  "  console.log('Exam ID saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"title\": \"Midterm Exam\",\n  \"instructions\": \"Solve all questions. Use Python 3.\",\n  \"duration_minutes\": 90,\n  \"starts_at\": \"2025-06-01T09:00:00Z\",\n  \"ends_at\": \"2025-06-01T12:00:00Z\",\n  \"language_id\": 71,\n  \"language_name\": \"Python 3\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/exams", "host": ["{{base_url}}"], "path": ["exams"] }
+          }
+        },
+        {
+          "name": "Update Exam",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Midterm Exam (Updated)\",\n  \"status\": \"scheduled\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Exam",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
+          }
+        },
+        {
+          "name": "Get Exam Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/results", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "results"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lecturer — Questions",
+      "item": [
+        {
+          "name": "Add Question",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('question_id', res.data.id);",
+                  "  console.log('Question ID saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Write a function that takes a string and returns it reversed.\",\n  \"order_index\": 1,\n  \"points\": 20\n}"
+            },
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/questions", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "questions"] }
+          }
+        },
+        {
+          "name": "Update Question",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Write a function that reverses a string. Return the result.\",\n  \"points\": 25\n}"
+            },
+            "url": { "raw": "{{base_url}}/questions/{{question_id}}", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Question",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/questions/{{question_id}}", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lecturer — Test Cases",
+      "item": [
+        {
+          "name": "Add Test Case (Visible)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('test_case_id', res.data.id);",
+                  "  console.log('Test Case ID saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"hello\",\n  \"expected_output\": \"olleh\",\n  \"is_hidden\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/questions/{{question_id}}/test-cases", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}", "test-cases"] }
+          }
+        },
+        {
+          "name": "Add Test Case (Hidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"abcdef\",\n  \"expected_output\": \"fedcba\",\n  \"is_hidden\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/questions/{{question_id}}/test-cases", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}", "test-cases"] }
+          }
+        },
+        {
+          "name": "Update Test Case",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": \"world\",\n  \"expected_output\": \"dlrow\",\n  \"is_hidden\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/test-cases/{{test_case_id}}", "host": ["{{base_url}}"], "path": ["test-cases", "{{test_case_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Test Case",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/test-cases/{{test_case_id}}", "host": ["{{base_url}}"], "path": ["test-cases", "{{test_case_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Student — Exam Flow",
+      "item": [
+        {
+          "name": "Get Available Exams",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/available", "host": ["{{base_url}}"], "path": ["exams", "available"] }
+          }
+        },
+        {
+          "name": "Start Exam",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('submission_id', res.data.id);",
+                  "  console.log('Submission ID saved:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/start", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "start"] }
+          }
+        },
+        {
+          "name": "Save Answer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question_id\": \"{{question_id}}\",\n  \"code\": \"def reverse_string(s):\\n    return s[::-1]\\nprint(reverse_string(input()))\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/answer", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "answer"] }
+          }
+        },
+        {
+          "name": "Submit Exam",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/submit", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "submit"] }
+          }
+        },
+        {
+          "name": "Get Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/result", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "result"] }
+          }
+        },
+        {
+          "name": "Log Violation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"tab_switch\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/violation", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "violation"] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Binaries
+proctura-backend
+*.exe
+*.test
+
+# Environment
+.env
+.env.local
+CLAUDE.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test cache
+/tmp/

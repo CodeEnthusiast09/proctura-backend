@@ -44,6 +44,11 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	var subdomain *string
+	if user.Tenant != nil {
+		subdomain = &user.Tenant.Subdomain
+	}
+
 	response.OK(c, "login successful", gin.H{
 		"access_token": token,
 		"user": gin.H{
@@ -53,6 +58,7 @@ func (h *Handler) Login(c *gin.Context) {
 			"first_name": user.FirstName,
 			"last_name":  user.LastName,
 			"tenant_id":  user.TenantID,
+			"subdomain":  subdomain,
 		},
 	})
 }
@@ -113,7 +119,7 @@ func (h *Handler) ForgotPassword(c *gin.Context) {
 	}
 
 	// We don't expose whether the email exists — always return 200
-	h.svc.ForgotPassword(req.Email) //nolint:errcheck
+	_ = h.svc.ForgotPassword(req.Email)
 
 	response.OK(c, "if that email exists, a reset link has been sent", nil)
 }

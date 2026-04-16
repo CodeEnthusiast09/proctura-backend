@@ -3,6 +3,7 @@ package tenant_test
 import (
 	"testing"
 
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/tenant"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/testutil"
@@ -14,7 +15,7 @@ func TestCreate_Success(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	ten, admin, err := svc.Create(tenant.CreateTenantInput{
 		Name:           "University of Lagos",
 		Subdomain:      "unilag",
@@ -34,7 +35,7 @@ func TestCreate_DuplicateSubdomain(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	_, _, err := svc.Create(tenant.CreateTenantInput{
 		Name:           "School A",
 		Subdomain:      "schoola",
@@ -58,7 +59,7 @@ func TestCreate_DuplicateAdminEmail(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	_, _, err := svc.Create(tenant.CreateTenantInput{
 		Name:           "School A",
 		Subdomain:      "schoola",
@@ -82,7 +83,7 @@ func TestList_Pagination(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	for i := 0; i < 5; i++ {
 		_, _, err := svc.Create(tenant.CreateTenantInput{
 			Name:           "School",
@@ -104,7 +105,7 @@ func TestUpdate_Success(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	ten, _, err := svc.Create(tenant.CreateTenantInput{
 		Name:           "Old Name",
 		Subdomain:      "oldname",
@@ -123,7 +124,7 @@ func TestDelete_NotFound(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := tenant.NewService(db)
+	svc := tenant.NewService(db, &mailer.NoOpMailer{}, "http://localhost:3000")
 	err := svc.Delete("00000000-0000-0000-0000-000000000000")
 	assert.ErrorIs(t, err, tenant.ErrTenantNotFound)
 }

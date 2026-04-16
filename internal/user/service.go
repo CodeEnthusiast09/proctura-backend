@@ -8,22 +8,25 @@ import (
 	"io"
 	"strings"
 
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 var (
-	ErrUserNotFound  = errors.New("user not found")
-	ErrEmailTaken    = errors.New("email already in use")
+	ErrUserNotFound = errors.New("user not found")
+	ErrEmailTaken   = errors.New("email already in use")
 )
 
 type Service struct {
-	db *gorm.DB
+	db          *gorm.DB
+	mailer      mailer.Mailer
+	frontendURL string
 }
 
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+func NewService(db *gorm.DB, m mailer.Mailer, frontendURL string) *Service {
+	return &Service{db: db, mailer: m, frontendURL: frontendURL}
 }
 
 // InviteLecturer creates an unverified lecturer account with an invite token.
@@ -57,6 +60,11 @@ func (s *Service) InviteLecturer(tenantID, email, firstName, lastName string) (*
 
 	if err := s.db.Create(&user).Error; err != nil {
 		return nil, "", fmt.Errorf("create lecturer: %w", err)
+	}
+
+	inviteLink := fmt.Sprintf("%s/accept-invite?token=%s", s.frontendURL, token)
+	if err := s.mailer.SendInvite(user.Email, user.FirstName, inviteLink); err != nil {
+		fmt.Printf("[mailer] failed to send invite to %s: %v\n", user.Email, err)
 	}
 
 	return &user, token, nil

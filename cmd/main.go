@@ -11,6 +11,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/database"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/exam"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/router"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/submission"
@@ -40,10 +41,19 @@ func main() {
 
 	seedSuperAdmin(db, cfg)
 
+	// Mailer
+	var m mailer.Mailer
+	if cfg.Email.ResendAPIKey != "" {
+		m = mailer.NewResendMailer(cfg.Email.ResendAPIKey, cfg.Email.From)
+	} else {
+		log.Println("[mailer] no RESEND_API_KEY set — using no-op mailer")
+		m = &mailer.NoOpMailer{}
+	}
+
 	// Services
-	authSvc := auth.NewService(db, cfg)
-	tenantSvc := tenant.NewService(db)
-	userSvc := user.NewService(db)
+	authSvc := auth.NewService(db, cfg, m)
+	tenantSvc := tenant.NewService(db, m, cfg.App.FrontendURL)
+	userSvc := user.NewService(db, m, cfg.App.FrontendURL)
 	courseSvc := course.NewService(db)
 	examSvc := exam.NewService(db)
 	judge0Client := submission.NewJudge0Client(cfg.Judge0)

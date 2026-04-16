@@ -5,23 +5,26 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 var (
-	ErrTenantNotFound    = errors.New("tenant not found")
-	ErrSubdomainTaken    = errors.New("subdomain already in use")
-	ErrAdminEmailTaken   = errors.New("admin email already in use")
+	ErrTenantNotFound  = errors.New("tenant not found")
+	ErrSubdomainTaken  = errors.New("subdomain already in use")
+	ErrAdminEmailTaken = errors.New("admin email already in use")
 )
 
 type Service struct {
-	db *gorm.DB
+	db          *gorm.DB
+	mailer      mailer.Mailer
+	frontendURL string
 }
 
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+func NewService(db *gorm.DB, m mailer.Mailer, frontendURL string) *Service {
+	return &Service{db: db, mailer: m, frontendURL: frontendURL}
 }
 
 type CreateTenantInput struct {
@@ -79,6 +82,12 @@ func (s *Service) Create(input CreateTenantInput) (*models.Tenant, *models.User,
 
 	if err := s.db.Create(&admin).Error; err != nil {
 		return nil, nil, fmt.Errorf("create admin user: %w", err)
+	}
+
+	inviteLink := fmt.Sprintf("%s/accept-invite?token=%s", s.frontendURL, inviteToken)
+	if err := s.mailer.SendInvite(admin.Email, admin.FirstName, inviteLink); err != nil {
+		// Non-fatal — token is stored, super admin can share the link manually
+		fmt.Printf("[mailer] failed to send invite to %s: %v\n", admin.Email, err)
 	}
 
 	return &tenant, &admin, nil

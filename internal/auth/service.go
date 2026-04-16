@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -23,19 +24,20 @@ var (
 )
 
 type Service struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db     *gorm.DB
+	cfg    *config.Config
+	mailer mailer.Mailer
 }
 
-func NewService(db *gorm.DB, cfg *config.Config) *Service {
-	return &Service{db: db, cfg: cfg}
+func NewService(db *gorm.DB, cfg *config.Config, m mailer.Mailer) *Service {
+	return &Service{db: db, cfg: cfg, mailer: m}
 }
 
 // Login validates credentials and returns a signed JWT.
 func (s *Service) Login(email, password string) (string, *models.User, error) {
 	var user models.User
 
-	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := s.db.Preload("Tenant").Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil, ErrInvalidCredentials
 		}
@@ -106,20 +108,20 @@ func (s *Service) RegisterStudent(subdomain, email, password, firstName, lastNam
 	return &user, nil
 }
 
-// ForgotPassword generates a reset token and returns it (caller sends email).
-func (s *Service) ForgotPassword(email string) (string, *models.User, error) {
+// ForgotPassword generates a reset token and emails the reset link.
+func (s *Service) ForgotPassword(email string) error {
 	var user models.User
 	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Return no error — don't reveal whether email exists
-			return "", nil, nil
+			// Silently succeed — don't reveal whether email exists
+			return nil
 		}
-		return "", nil, fmt.Errorf("get user: %w", err)
+		return fmt.Errorf("get user: %w", err)
 	}
 
 	token, err := generateSecureToken()
 	if err != nil {
-		return "", nil, fmt.Errorf("generate token: %w", err)
+		return fmt.Errorf("generate token: %w", err)
 	}
 
 	expiry := time.Now().Add(1 * time.Hour)
@@ -127,10 +129,15 @@ func (s *Service) ForgotPassword(email string) (string, *models.User, error) {
 		"reset_token":        token,
 		"reset_token_expiry": expiry,
 	}).Error; err != nil {
-		return "", nil, fmt.Errorf("save reset token: %w", err)
+		return fmt.Errorf("save reset token: %w", err)
 	}
 
-	return token, &user, nil
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.cfg.App.FrontendURL, token)
+	if err := s.mailer.SendPasswordReset(user.Email, user.FirstName, resetLink); err != nil {
+		fmt.Printf("[mailer] failed to send reset email to %s: %v\n", user.Email, err)
+	}
+
+	return nil
 }
 
 // ResetPassword validates the token and updates the password.

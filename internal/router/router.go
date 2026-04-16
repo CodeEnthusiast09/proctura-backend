@@ -1,6 +1,8 @@
 package router
 
 import (
+	"os"
+
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/exam"
@@ -8,6 +10,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/submission"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/tenant"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/user"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -23,6 +26,19 @@ type Handlers struct {
 
 func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	r.Use(gin.Recovery())
+
+	allowedOrigins := []string{os.Getenv("APP_BASE_URL")}
+	if gin.Mode() != gin.ReleaseMode {
+		allowedOrigins = append(allowedOrigins, "http://localhost:3000", "http://127.0.0.1:3000")
+	}
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Tenant-Subdomain"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	api := r.Group("/api/v1")
 

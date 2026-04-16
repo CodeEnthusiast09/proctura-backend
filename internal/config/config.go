@@ -36,15 +36,13 @@ type Judge0Config struct {
 }
 
 type EmailConfig struct {
-	From     string
-	Host     string
-	Port     int
-	Username string
-	Password string
+	From        string
+	ResendAPIKey string
 }
 
 type AppConfig struct {
 	BaseURL            string
+	FrontendURL        string
 	SuperAdminEmail    string
 	SuperAdminPassword string
 }
@@ -70,14 +68,12 @@ func Load() *Config {
 			Host:    getEnv("JUDGE0_API_HOST", "judge0-ce.p.rapidapi.com"),
 		},
 		Email: EmailConfig{
-			From:     getEnv("EMAIL_FROM", ""),
-			Host:     getEnv("EMAIL_HOST", ""),
-			Port:     getEnvInt("EMAIL_PORT", 587),
-			Username: getEnv("EMAIL_USERNAME", ""),
-			Password: getEnv("EMAIL_PASSWORD", ""),
+			From:         getEnv("EMAIL_FROM", "Proctura <noreply@proctura.com>"),
+			ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		},
 		App: AppConfig{
-			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:3000"),
+			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:8080"),
+			FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
 			SuperAdminEmail:    getEnv("SUPER_ADMIN_EMAIL", "admin@yopmail.com"),
 			SuperAdminPassword: getEnv("SUPER_ADMIN_PASSWORD", "12345678"),
 		},

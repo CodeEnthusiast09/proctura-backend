@@ -6,6 +6,7 @@ import (
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/testutil"
 	"github.com/stretchr/testify/assert"
@@ -19,8 +20,12 @@ func testCfg() *config.Config {
 			Secret:     "test-secret",
 			Expiration: 24 * time.Hour,
 		},
+		App: config.AppConfig{
+			FrontendURL: "http://localhost:3000",
+		},
 	}
 }
+
 
 func TestLogin_Success(t *testing.T) {
 	db := testutil.NewTestDB(t)
@@ -38,7 +43,7 @@ func TestLogin_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&user).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	token, returned, err := svc.Login("lecturer@test.com", "password123")
 
 	require.NoError(t, err)
@@ -62,7 +67,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&user).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	_, _, err := svc.Login("user@test.com", "wrong")
 
 	assert.ErrorIs(t, err, auth.ErrInvalidCredentials)
@@ -79,14 +84,13 @@ func TestLogin_InactiveAccount(t *testing.T) {
 		Role:         models.RoleLecturer,
 		FirstName:    "Test",
 		LastName:     "User",
-		IsActive:     true, // create active first (GORM skips false zero-values on default:true fields)
+		IsActive:     true,
 		IsVerified:   true,
 	}
 	require.NoError(t, db.Create(&user).Error)
-	// Explicitly set inactive after creation
 	require.NoError(t, db.Model(&user).Update("is_active", false).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	_, _, err := svc.Login("inactive@test.com", "password123")
 
 	assert.ErrorIs(t, err, auth.ErrAccountInactive)
@@ -99,7 +103,7 @@ func TestRegisterStudent_Success(t *testing.T) {
 	tenant := models.Tenant{Name: "Unilag", Subdomain: "unilag", IsActive: true}
 	require.NoError(t, db.Create(&tenant).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	user, err := svc.RegisterStudent("unilag", "student@unilag.edu", "pass123", "John", "Doe", "CSC/2020/001")
 
 	require.NoError(t, err)
@@ -111,7 +115,7 @@ func TestRegisterStudent_InvalidTenant(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	_, err := svc.RegisterStudent("nonexistent", "s@test.com", "pass", "A", "B", "MAT/001")
 
 	assert.ErrorIs(t, err, auth.ErrTenantNotFound)
@@ -121,12 +125,10 @@ func TestForgotPassword_SilentOnMissingEmail(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	defer testutil.CleanupTables(t, db)
 
-	svc := auth.NewService(db, testCfg())
-	token, user, err := svc.ForgotPassword("ghost@nobody.com")
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
+	err := svc.ForgotPassword("ghost@nobody.com")
 
 	require.NoError(t, err)
-	assert.Empty(t, token)
-	assert.Nil(t, user)
 }
 
 func TestResetPassword_Success(t *testing.T) {
@@ -149,11 +151,10 @@ func TestResetPassword_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&user).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	err := svc.ResetPassword(resetToken, "newpassword123")
 	require.NoError(t, err)
 
-	// Verify new password works
 	_, _, loginErr := svc.Login("reset@test.com", "newpassword123")
 	assert.NoError(t, loginErr)
 }
@@ -176,7 +177,7 @@ func TestAcceptInvite_Success(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&user).Error)
 
-	svc := auth.NewService(db, testCfg())
+	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
 	updated, err := svc.AcceptInvite(token, "Jane", "Smith", "securepass")
 
 	require.NoError(t, err)

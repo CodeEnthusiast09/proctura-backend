@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/joho/godotenv"
+
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
@@ -20,6 +22,10 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("[env] no .env file found, using system environment")
+	}
+
 	cfg := config.Load()
 
 	db, err := database.Connect(cfg.DB)

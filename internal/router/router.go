@@ -12,8 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
-
 type Handlers struct {
 	Auth       *auth.Handler
 	Tenant     *tenant.Handler
@@ -108,7 +106,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		studentRoutes.GET("/exams/available", h.Exam.GetAvailableExams)
 
 		// Submissions
-		studentRoutes.POST("/exams/:examID/start", h.Submission.StartExam)
+		studentRoutes.POST("/exams/:id/start", h.Submission.StartExam)
 		studentRoutes.PUT("/submissions/:id/answer", h.Submission.SaveAnswer)
 		studentRoutes.POST("/submissions/:id/submit", h.Submission.Submit)
 		studentRoutes.GET("/submissions/:id/result", h.Submission.GetResult)

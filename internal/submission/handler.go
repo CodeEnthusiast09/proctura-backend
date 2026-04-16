@@ -18,7 +18,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) StartExam(c *gin.Context) {
 	tenantID := c.GetString("tenantID")
 	studentID := c.GetString("userID")
-	examID := c.Param("examID")
+	examID := c.Param("id")
 
 	sub, err := h.svc.StartExam(tenantID, examID, studentID)
 	if err != nil {

@@ -7,12 +7,12 @@ import (
 )
 
 type Config struct {
-	Port     int
-	DB       DBConfig
-	JWT      JWTConfig
-	Judge0   Judge0Config
-	Email    EmailConfig
-	App      AppConfig
+	Port   int
+	DB     DBConfig
+	JWT    JWTConfig
+	Judge0 Judge0Config
+	Email  EmailConfig
+	App    AppConfig
 }
 
 type DBConfig struct {
@@ -44,8 +44,8 @@ type EmailConfig struct {
 }
 
 type AppConfig struct {
-	BaseURL        string
-	SuperAdminEmail string
+	BaseURL            string
+	SuperAdminEmail    string
 	SuperAdminPassword string
 }
 
@@ -78,8 +78,8 @@ func Load() *Config {
 		},
 		App: AppConfig{
 			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:3000"),
-			SuperAdminEmail:    getEnv("SUPER_ADMIN_EMAIL", ""),
-			SuperAdminPassword: getEnv("SUPER_ADMIN_PASSWORD", ""),
+			SuperAdminEmail:    getEnv("SUPER_ADMIN_EMAIL", "admin@yopmail.com"),
+			SuperAdminPassword: getEnv("SUPER_ADMIN_PASSWORD", "12345678"),
 		},
 	}
 }

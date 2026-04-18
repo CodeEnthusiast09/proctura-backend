@@ -67,6 +67,41 @@ func (h *Handler) InviteLecturer(c *gin.Context) {
 	})
 }
 
+// InviteStudent godoc
+// POST /users/invite-student
+type inviteStudentRequest struct {
+	Email        string `json:"email" binding:"required,email"`
+	FirstName    string `json:"first_name" binding:"required"`
+	LastName     string `json:"last_name" binding:"required"`
+	MatricNumber string `json:"matric_number" binding:"required"`
+}
+
+func (h *Handler) InviteStudent(c *gin.Context) {
+	var req inviteStudentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	tenantID := c.GetString("tenantID")
+
+	user, token, err := h.svc.InviteStudent(tenantID, req.Email, req.FirstName, req.LastName, req.MatricNumber)
+	if err != nil {
+		if errors.Is(err, ErrEmailTaken) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to invite student")
+		return
+	}
+
+	response.Created(c, "student invited — they will receive an email to set up their account", gin.H{
+		"id":           user.ID,
+		"email":        user.Email,
+		"invite_token": token,
+	})
+}
+
 // ImportStudents godoc
 // POST /users/import
 func (h *Handler) ImportStudents(c *gin.Context) {

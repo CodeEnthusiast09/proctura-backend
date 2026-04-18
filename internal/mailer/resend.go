@@ -2,7 +2,11 @@
 package mailer
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	resend "github.com/resend/resend-go/v2"
 )
@@ -46,6 +50,45 @@ func (m *ResendMailer) SendPasswordReset(to, firstName, resetLink string) error 
 	return nil
 }
 
+func (m *ResendMailer) SendLoginNotification(to, firstName, loginTime, ip, location string) error {
+	_, err := m.client.Emails.Send(&resend.SendEmailRequest{
+		From:    m.from,
+		To:      []string{to},
+		Subject: "New sign-in to your Proctura account",
+		Html:    loginNotificationHTML(firstName, loginTime, ip, location),
+	})
+	if err != nil {
+		return fmt.Errorf("resend send login notification: %w", err)
+	}
+	return nil
+}
+
+// LookupLocation attempts to resolve an IP address to "City, Country".
+// Falls back to "Unknown location" on any error.
+func LookupLocation(ip string) string {
+	// Skip private/loopback IPs
+	if ip == "" || strings.HasPrefix(ip, "127.") || strings.HasPrefix(ip, "::1") || strings.HasPrefix(ip, "192.168.") {
+		return "Local network"
+	}
+
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://ip-api.com/json/" + ip + "?fields=city,country,status")
+	if err != nil {
+		return "Unknown location"
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Status  string `json:"status"`
+		City    string `json:"city"`
+		Country string `json:"country"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Status != "success" {
+		return "Unknown location"
+	}
+	return result.City + ", " + result.Country
+}
+
 // ── Email templates ───────────────────────────────────────────────────────────
 
 func inviteHTML(firstName, inviteLink string) string {
@@ -71,6 +114,45 @@ func inviteHTML(firstName, inviteLink string) string {
   </div>
 </body>
 </html>`, firstName, inviteLink)
+}
+
+func loginNotificationHTML(firstName, loginTime, ip, location string) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<body style="font-family:sans-serif;background:#f8fafc;padding:40px 0;margin:0">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e2e8f0">
+    <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 8px">
+      New sign-in detected, %s
+    </h1>
+    <p style="color:#64748b;font-size:15px;margin:0 0 24px;line-height:1.6">
+      Your Proctura account was just signed into. Here are the details:
+    </p>
+    <table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#94a3b8;width:40%%">Time</td>
+        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500">%s</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#94a3b8">IP Address</td>
+        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:monospace">%s</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;color:#94a3b8">Location</td>
+        <td style="padding:10px 0;color:#0f172a;font-weight:500">%s</td>
+      </tr>
+    </table>
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px">
+      <p style="color:#dc2626;font-size:14px;font-weight:600;margin:0 0 4px">Not you?</p>
+      <p style="color:#b91c1c;font-size:13px;margin:0;line-height:1.5">
+        If you didn't sign in, your account may be compromised. Change your password immediately.
+      </p>
+    </div>
+    <p style="color:#94a3b8;font-size:12px;margin:0;line-height:1.6">
+      If this was you, no action is needed.
+    </p>
+  </div>
+</body>
+</html>`, firstName, loginTime, ip, location)
 }
 
 func resetHTML(firstName, resetLink string) string {

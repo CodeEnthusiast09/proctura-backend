@@ -69,7 +69,10 @@ make run
 | `JUDGE0_API_HOST`       | RapidAPI host                            | `judge0-ce.p.rapidapi.com`       |
 | `SUPER_ADMIN_EMAIL`     | Super admin email (seeded on boot)       | `admin@proctura.com`             |
 | `SUPER_ADMIN_PASSWORD`  | Super admin password (seeded on boot)    | —                                |
-| `APP_BASE_URL`          | App base URL                             | `http://localhost:8080`          |
+| `RESEND_API_KEY`        | Resend API key (login notification email)| —                                |
+| `EMAIL_FROM`            | Sender address for transactional email   | `Proctura <noreply@proctura.com>`|
+| `FRONTEND_URL`          | Frontend app URL (used in email links)   | `http://localhost:3000`          |
+| `APP_BASE_URL`          | App base URL (CORS allowed origin)       | `http://localhost:8080`          |
 
 ## API Reference
 
@@ -110,21 +113,28 @@ Requires `Authorization: Bearer <token>` + `X-Tenant-Subdomain: <subdomain>` (lo
 
 ### Lecturer (+ School Admin)
 
-| Method | Endpoint                          | Description                    |
-|--------|-----------------------------------|--------------------------------|
-| POST   | `/courses`                        | Create a course                |
-| PUT    | `/courses/:id`                    | Update a course                |
-| DELETE | `/courses/:id`                    | Delete a course                |
-| POST   | `/exams`                          | Create an exam                 |
-| PUT    | `/exams/:id`                      | Update exam (draft only)       |
-| DELETE | `/exams/:id`                      | Delete an exam                 |
-| GET    | `/exams/:id/results`              | View all student submissions   |
-| POST   | `/exams/:id/questions`            | Add a question                 |
-| PUT    | `/questions/:id`                  | Update a question              |
-| DELETE | `/questions/:id`                  | Delete a question              |
-| POST   | `/questions/:id/test-cases`       | Add a test case                |
-| PUT    | `/test-cases/:id`                 | Update a test case             |
-| DELETE | `/test-cases/:id`                 | Delete a test case             |
+| Method | Endpoint                                      | Description                              |
+|--------|-----------------------------------------------|------------------------------------------|
+| POST   | `/courses`                                    | Create a course                          |
+| PUT    | `/courses/:id`                                | Update a course                          |
+| DELETE | `/courses/:id`                                | Delete a course                          |
+| POST   | `/courses/:id/enroll`                         | Enroll students by matric number         |
+| DELETE | `/courses/:id/enrollments/:studentId`         | Remove a student from a course           |
+| GET    | `/courses/:id/enrollments`                    | List enrolled students                   |
+| POST   | `/exams`                                      | Create an exam                           |
+| PUT    | `/exams/:id`                                  | Update exam (draft only)                 |
+| PATCH  | `/exams/:id/status`                           | Update exam status                       |
+| DELETE | `/exams/:id`                                  | Delete an exam                           |
+| GET    | `/exams/:id/results`                          | View all student submissions for an exam |
+| GET    | `/results`                                    | View all results across all exams        |
+| GET    | `/submissions/:id`                            | View full submission detail with code    |
+| PATCH  | `/submissions/:id/answers/:answerId/score`    | Override score for a specific answer     |
+| POST   | `/exams/:id/questions`                        | Add a question                           |
+| PUT    | `/questions/:id`                              | Update a question                        |
+| DELETE | `/questions/:id`                              | Delete a question                        |
+| POST   | `/questions/:id/test-cases`                   | Add test cases                           |
+| PUT    | `/test-cases/:id`                             | Update a test case                       |
+| DELETE | `/test-cases/:id`                             | Delete a test case                       |
 
 ### Shared (all authenticated roles)
 
@@ -137,14 +147,17 @@ Requires `Authorization: Bearer <token>` + `X-Tenant-Subdomain: <subdomain>` (lo
 
 ### Student
 
-| Method | Endpoint                          | Description                              |
-|--------|-----------------------------------|------------------------------------------|
-| GET    | `/exams/available`                | Get exams currently open for submission  |
-| POST   | `/exams/:examID/start`            | Start an exam (creates submission)       |
-| PUT    | `/submissions/:id/answer`         | Save / update answer for a question      |
-| POST   | `/submissions/:id/submit`         | Final submission (triggers grading)      |
-| GET    | `/submissions/:id/result`         | Get graded result                        |
-| POST   | `/submissions/:id/violation`      | Log anti-cheat violation (tab switch etc)|
+| Method | Endpoint                          | Description                               |
+|--------|-----------------------------------|-------------------------------------------|
+| GET    | `/exams/available`                | Get exams open for enrolled students      |
+| GET    | `/my-submissions`                 | List all of the student's submissions     |
+| GET    | `/exams/:id/my-submission`        | Get student's submission for a given exam |
+| POST   | `/exams/:examID/start`            | Start an exam (creates submission)        |
+| PUT    | `/submissions/:id/answer`         | Save / update answer for a question       |
+| POST   | `/submissions/:id/run`            | Run code against visible test cases       |
+| POST   | `/submissions/:id/submit`         | Final submission (triggers grading)       |
+| GET    | `/submissions/:id/result`         | Poll for graded result                    |
+| POST   | `/submissions/:id/violation`      | Log anti-cheat violation (tab switch etc) |
 
 ## Judge0 Language IDs
 
@@ -165,6 +178,23 @@ Grading runs asynchronously after `POST /submissions/:id/submit`:
 3. Score per question = `(passed_cases / total_cases) × question.points`
 4. Total score is saved when all questions are graded
 5. Poll `GET /submissions/:id/result` — status changes from `submitted` → `graded`
+
+## Score Override
+
+Lecturers can manually override the auto-graded score for any answer:
+
+- `PATCH /submissions/:id/answers/:answerId/score` accepts `{ score: int }`
+- Score is validated against the question's max points
+- `total_score` on the submission is recalculated automatically after each override
+
+## Login Notifications
+
+A security notification email is sent on every successful login:
+
+- Sent asynchronously (does not delay the login response)
+- Includes login time, IP address, and geolocation (city/country via ip-api.com)
+- Skips geolocation for private/loopback IPs
+- Powered by [Resend](https://resend.com) — configure `RESEND_API_KEY` and `EMAIL_FROM`
 
 ## Anti-Cheat
 

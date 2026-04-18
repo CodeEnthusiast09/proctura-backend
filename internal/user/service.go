@@ -70,6 +70,48 @@ func (s *Service) InviteLecturer(tenantID, email, firstName, lastName string) (*
 	return &user, token, nil
 }
 
+// InviteStudent creates a single student account with an invite token.
+func (s *Service) InviteStudent(tenantID, email, firstName, lastName, matricNumber string) (*models.User, string, error) {
+	var existing models.User
+	if err := s.db.Where("email = ?", email).First(&existing).Error; err == nil {
+		return nil, "", ErrEmailTaken
+	}
+
+	tempHash, err := bcrypt.GenerateFromPassword([]byte("student-pending"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, "", fmt.Errorf("hash temp password: %w", err)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		return nil, "", fmt.Errorf("generate invite token: %w", err)
+	}
+
+	user := models.User{
+		TenantID:     &tenantID,
+		Email:        email,
+		PasswordHash: string(tempHash),
+		Role:         models.RoleStudent,
+		FirstName:    firstName,
+		LastName:     lastName,
+		MatricNumber: &matricNumber,
+		IsActive:     true,
+		IsVerified:   false,
+		InviteToken:  &token,
+	}
+
+	if err := s.db.Create(&user).Error; err != nil {
+		return nil, "", fmt.Errorf("create student: %w", err)
+	}
+
+	inviteLink := fmt.Sprintf("%s/accept-invite?token=%s", s.frontendURL, token)
+	if err := s.mailer.SendInvite(user.Email, user.FirstName, inviteLink); err != nil {
+		fmt.Printf("[mailer] failed to send invite to %s: %v\n", user.Email, err)
+	}
+
+	return &user, token, nil
+}
+
 // ImportStudents parses a CSV and bulk-creates student accounts.
 // Expected CSV columns: email, first_name, last_name, matric_number
 func (s *Service) ImportStudents(tenantID string, r io.Reader) (int, []string, error) {
@@ -131,6 +173,11 @@ func (s *Service) ImportStudents(tenantID string, r io.Reader) (int, []string, e
 		if err := s.db.Create(&user).Error; err != nil {
 			skipped = append(skipped, fmt.Sprintf("row %d: failed to create user", i+2))
 			continue
+		}
+
+		inviteLink := fmt.Sprintf("%s/accept-invite?token=%s", s.frontendURL, token)
+		if err := s.mailer.SendInvite(user.Email, user.FirstName, inviteLink); err != nil {
+			fmt.Printf("[mailer] failed to send invite to %s: %v\n", user.Email, err)
 		}
 
 		created++

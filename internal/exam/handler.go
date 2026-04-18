@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/response"
 	"github.com/gin-gonic/gin"
 )
@@ -152,6 +153,37 @@ func (h *Handler) UpdateExam(c *gin.Context) {
 	response.OK(c, "exam updated", exam)
 }
 
+type updateExamStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+func (h *Handler) UpdateExamStatus(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+	examID := c.Param("id")
+
+	var req updateExamStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	exam, err := h.svc.UpdateExamStatus(tenantID, examID, models.ExamStatus(req.Status))
+	if err != nil {
+		if errors.Is(err, ErrExamNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidTransition) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to update exam status")
+		return
+	}
+
+	response.OK(c, "exam status updated", exam)
+}
+
 func (h *Handler) DeleteExam(c *gin.Context) {
 	tenantID := c.GetString("tenantID")
 	examID := c.Param("id")
@@ -170,8 +202,9 @@ func (h *Handler) DeleteExam(c *gin.Context) {
 
 func (h *Handler) GetAvailableExams(c *gin.Context) {
 	tenantID := c.GetString("tenantID")
+	studentID := c.GetString("userID")
 
-	exams, err := h.svc.GetAvailableExams(tenantID)
+	exams, err := h.svc.GetAvailableExams(tenantID, studentID)
 	if err != nil {
 		response.InternalError(c, "failed to get available exams")
 		return
@@ -276,19 +309,33 @@ type addTestCaseRequest struct {
 func (h *Handler) AddTestCase(c *gin.Context) {
 	questionID := c.Param("id")
 
-	var req addTestCaseRequest
+	var req []addTestCaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	tc, err := h.svc.AddTestCase(questionID, req.Input, req.ExpectedOutput, req.IsHidden)
-	if err != nil {
-		response.InternalError(c, "failed to add test case")
+	if len(req) == 0 {
+		response.BadRequest(c, "at least one test case is required")
 		return
 	}
 
-	response.Created(c, "test case added", tc)
+	inputs := make([]TestCaseInput, len(req))
+	for i, r := range req {
+		inputs[i] = TestCaseInput{
+			Input:          r.Input,
+			ExpectedOutput: r.ExpectedOutput,
+			IsHidden:       r.IsHidden,
+		}
+	}
+
+	tcs, err := h.svc.AddTestCases(questionID, inputs)
+	if err != nil {
+		response.InternalError(c, "failed to add test cases")
+		return
+	}
+
+	response.Created(c, "test cases added", tcs)
 }
 
 type updateTestCaseRequest struct {

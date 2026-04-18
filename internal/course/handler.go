@@ -2,6 +2,7 @@ package course
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/response"
@@ -44,15 +45,18 @@ func (h *Handler) List(c *gin.Context) {
 	tenantID := c.GetString("tenantID")
 	role := c.GetString("role")
 
-	// Lecturers only see their own courses; admins see all
-	lecturerID := ""
-	if role == string(models.RoleLecturer) {
+	// Role-based filtering: lecturers see own courses, students see enrolled only, admins see all
+	lecturerID, studentID := "", ""
+	switch role {
+	case string(models.RoleLecturer):
 		lecturerID = c.GetString("userID")
+	case string(models.RoleStudent):
+		studentID = c.GetString("userID")
 	}
 
 	page, limit := parsePagination(c)
 
-	courses, total, err := h.svc.List(tenantID, lecturerID, page, limit)
+	courses, total, err := h.svc.List(tenantID, lecturerID, studentID, page, limit)
 	if err != nil {
 		response.InternalError(c, "failed to list courses")
 		return
@@ -108,6 +112,89 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	response.OK(c, "course deleted", nil)
+}
+
+type enrollRequest struct {
+	MatricNumbers []string `json:"matric_numbers" binding:"required,min=1"`
+}
+
+func (h *Handler) Enroll(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+	courseID := c.Param("id")
+	requesterID := c.GetString("userID")
+	requesterRole := c.GetString("role")
+
+	var req enrollRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	count, err := h.svc.Enroll(tenantID, courseID, requesterID, requesterRole, req.MatricNumbers)
+	if err != nil {
+		if errors.Is(err, ErrCourseNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrNotCourseOwner) {
+			response.Forbidden(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to enroll students")
+		return
+	}
+
+	response.OK(c, fmt.Sprintf("%d student(s) enrolled", count), nil)
+}
+
+func (h *Handler) Unenroll(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+	courseID := c.Param("id")
+	studentID := c.Param("studentId")
+	requesterID := c.GetString("userID")
+	requesterRole := c.GetString("role")
+
+	if err := h.svc.Unenroll(tenantID, courseID, studentID, requesterID, requesterRole); err != nil {
+		if errors.Is(err, ErrCourseNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrNotCourseOwner) {
+			response.Forbidden(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrEnrollmentNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to unenroll student")
+		return
+	}
+
+	response.OK(c, "student unenrolled", nil)
+}
+
+func (h *Handler) ListEnrollments(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+	courseID := c.Param("id")
+	requesterID := c.GetString("userID")
+	requesterRole := c.GetString("role")
+
+	enrollments, err := h.svc.ListEnrollments(tenantID, courseID, requesterID, requesterRole)
+	if err != nil {
+		if errors.Is(err, ErrCourseNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrNotCourseOwner) {
+			response.Forbidden(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to list enrollments")
+		return
+	}
+
+	response.OK(c, "enrollments retrieved", enrollments)
 }
 
 func parsePagination(c *gin.Context) (int, int) {

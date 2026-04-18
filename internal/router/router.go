@@ -75,6 +75,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		// User management
 		adminRoutes.GET("/users", h.User.List)
 		adminRoutes.POST("/users/invite-lecturer", h.User.InviteLecturer)
+		adminRoutes.POST("/users/invite-student", h.User.InviteStudent)
 		adminRoutes.POST("/users/import-students", h.User.ImportStudents)
 		adminRoutes.PUT("/users/:id", h.User.Update)
 		adminRoutes.DELETE("/users/:id", h.User.Delete)
@@ -89,11 +90,20 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		lecturerRoutes.PUT("/courses/:id", h.Course.Update)
 		lecturerRoutes.DELETE("/courses/:id", h.Course.Delete)
 
+		// Enrollments
+		lecturerRoutes.POST("/courses/:id/enroll", h.Course.Enroll)
+		lecturerRoutes.DELETE("/courses/:id/enrollments/:studentId", h.Course.Unenroll)
+		lecturerRoutes.GET("/courses/:id/enrollments", h.Course.ListEnrollments)
+
 		// Exams
 		lecturerRoutes.POST("/exams", h.Exam.CreateExam)
 		lecturerRoutes.PUT("/exams/:id", h.Exam.UpdateExam)
+		lecturerRoutes.PATCH("/exams/:id/status", h.Exam.UpdateExamStatus)
 		lecturerRoutes.DELETE("/exams/:id", h.Exam.DeleteExam)
 		lecturerRoutes.GET("/exams/:id/results", h.Exam.GetResults)
+		lecturerRoutes.GET("/results", h.Submission.GetAllResults)
+		lecturerRoutes.GET("/submissions/:id", h.Submission.GetSubmissionDetail)
+		lecturerRoutes.PATCH("/submissions/:id/answers/:answerId/score", h.Submission.OverrideAnswerScore)
 
 		// Questions
 		lecturerRoutes.POST("/exams/:id/questions", h.Exam.AddQuestion)
@@ -122,8 +132,11 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		studentRoutes.GET("/exams/available", h.Exam.GetAvailableExams)
 
 		// Submissions
+		studentRoutes.GET("/my-submissions", h.Submission.GetMySubmissions)
 		studentRoutes.POST("/exams/:id/start", h.Submission.StartExam)
+		studentRoutes.GET("/exams/:id/my-submission", h.Submission.GetMySubmission)
 		studentRoutes.PUT("/submissions/:id/answer", h.Submission.SaveAnswer)
+		studentRoutes.POST("/submissions/:id/run", h.Submission.RunCode)
 		studentRoutes.POST("/submissions/:id/submit", h.Submission.Submit)
 		studentRoutes.GET("/submissions/:id/result", h.Submission.GetResult)
 		studentRoutes.POST("/submissions/:id/violation", h.Submission.LogViolation)

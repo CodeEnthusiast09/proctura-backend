@@ -10,11 +10,19 @@ import (
 )
 
 var (
-	ErrExamNotFound     = errors.New("exam not found")
-	ErrQuestionNotFound = errors.New("question not found")
-	ErrTestCaseNotFound = errors.New("test case not found")
-	ErrExamNotEditable  = errors.New("exam cannot be edited after it has started")
+	ErrExamNotFound        = errors.New("exam not found")
+	ErrQuestionNotFound    = errors.New("question not found")
+	ErrTestCaseNotFound    = errors.New("test case not found")
+	ErrExamNotEditable     = errors.New("exam cannot be edited after it has started")
+	ErrInvalidTransition   = errors.New("invalid status transition")
 )
+
+var validTransitions = map[models.ExamStatus]models.ExamStatus{
+	models.ExamStatusDraft:     models.ExamStatusScheduled,
+	models.ExamStatusScheduled: models.ExamStatusActive,
+	models.ExamStatusActive:    models.ExamStatusClosed,
+	models.ExamStatusClosed:    models.ExamStatusDraft,
+}
 
 type Service struct {
 	db *gorm.DB
@@ -110,6 +118,27 @@ func (s *Service) UpdateExam(tenantID, examID string, updates map[string]any) (*
 	return &exam, nil
 }
 
+func (s *Service) UpdateExamStatus(tenantID, examID string, next models.ExamStatus) (*models.Exam, error) {
+	var exam models.Exam
+	if err := s.db.Where("id = ? AND tenant_id = ?", examID, tenantID).First(&exam).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrExamNotFound
+		}
+		return nil, fmt.Errorf("get exam: %w", err)
+	}
+
+	allowed, ok := validTransitions[exam.Status]
+	if !ok || allowed != next {
+		return nil, ErrInvalidTransition
+	}
+
+	if err := s.db.Model(&exam).Update("status", next).Error; err != nil {
+		return nil, fmt.Errorf("update exam status: %w", err)
+	}
+
+	return &exam, nil
+}
+
 func (s *Service) DeleteExam(tenantID, examID string) error {
 	result := s.db.Where("id = ? AND tenant_id = ?", examID, tenantID).Delete(&models.Exam{})
 	if result.Error != nil {
@@ -121,13 +150,12 @@ func (s *Service) DeleteExam(tenantID, examID string) error {
 	return nil
 }
 
-// GetAvailableExams returns exams a student can currently take.
-func (s *Service) GetAvailableExams(tenantID string) ([]models.Exam, error) {
-	now := time.Now()
+// GetAvailableExams returns active exams for courses the student is enrolled in.
+func (s *Service) GetAvailableExams(tenantID, studentID string) ([]models.Exam, error) {
 	var exams []models.Exam
 	if err := s.db.
-		Where("tenant_id = ? AND starts_at <= ? AND ends_at >= ? AND status = ?",
-			tenantID, now, now, models.ExamStatusScheduled).
+		Joins("JOIN course_enrollments ON course_enrollments.course_id = exams.course_id AND course_enrollments.student_id = ?", studentID).
+		Where("exams.tenant_id = ? AND exams.status = ?", tenantID, models.ExamStatusActive).
 		Preload("Course").
 		Find(&exams).Error; err != nil {
 		return nil, fmt.Errorf("get available exams: %w", err)
@@ -209,17 +237,26 @@ func (s *Service) DeleteQuestion(questionID string) error {
 
 // ── TestCase ──────────────────────────────────────────────────────────────────
 
-func (s *Service) AddTestCase(questionID string, input *string, expectedOutput string, isHidden bool) (*models.TestCase, error) {
-	tc := models.TestCase{
-		QuestionID:     questionID,
-		Input:          input,
-		ExpectedOutput: expectedOutput,
-		IsHidden:       isHidden,
+type TestCaseInput struct {
+	Input          *string
+	ExpectedOutput string
+	IsHidden       bool
+}
+
+func (s *Service) AddTestCases(questionID string, inputs []TestCaseInput) ([]models.TestCase, error) {
+	tcs := make([]models.TestCase, len(inputs))
+	for i, inp := range inputs {
+		tcs[i] = models.TestCase{
+			QuestionID:     questionID,
+			Input:          inp.Input,
+			ExpectedOutput: inp.ExpectedOutput,
+			IsHidden:       inp.IsHidden,
+		}
 	}
-	if err := s.db.Create(&tc).Error; err != nil {
-		return nil, fmt.Errorf("create test case: %w", err)
+	if err := s.db.Create(&tcs).Error; err != nil {
+		return nil, fmt.Errorf("create test cases: %w", err)
 	}
-	return &tc, nil
+	return tcs, nil
 }
 
 func (s *Service) UpdateTestCase(testCaseID string, input *string, expectedOutput string, isHidden *bool) (*models.TestCase, error) {

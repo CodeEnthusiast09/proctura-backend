@@ -2,8 +2,6 @@ package models
 
 import (
 	"time"
-
-	"github.com/lib/pq"
 )
 
 // ── Tenant ────────────────────────────────────────────────────────────────────
@@ -180,7 +178,7 @@ type SubmissionAnswer struct {
 	Stderr       *string        `gorm:"type:text" json:"stderr,omitempty"`
 	CompileOutput *string       `gorm:"type:text" json:"compile_output,omitempty"`
 	StatusDesc   *string        `json:"status_desc,omitempty"`
-	TestResults  pq.StringArray `gorm:"type:text[]" json:"test_results,omitempty"` // JSON per test case
+	TestResults  string         `gorm:"type:text;default:''" json:"test_results,omitempty"`
 	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt    time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 
@@ -189,3 +187,18 @@ type SubmissionAnswer struct {
 }
 
 func (SubmissionAnswer) TableName() string { return "submission_answers" }
+
+// ── CourseEnrollment ──────────────────────────────────────────────────────────
+
+type CourseEnrollment struct {
+	ID        string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TenantID  string    `gorm:"type:uuid;not null;index" json:"tenant_id"`
+	CourseID  string    `gorm:"type:uuid;not null;uniqueIndex:idx_enrollment_course_student" json:"course_id"`
+	StudentID string    `gorm:"type:uuid;not null;uniqueIndex:idx_enrollment_course_student" json:"student_id"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"enrolled_at"`
+
+	Course  *Course `gorm:"foreignKey:CourseID" json:"course,omitempty"`
+	Student *User   `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+}
+
+func (CourseEnrollment) TableName() string { return "course_enrollments" }

@@ -44,6 +44,9 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	// Fire login notification email asynchronously
+	go h.svc.SendLoginNotification(user.Email, user.FirstName, c.ClientIP())
+
 	var subdomain *string
 	if user.Tenant != nil {
 		subdomain = &user.Tenant.Subdomain

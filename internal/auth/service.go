@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
@@ -67,6 +68,15 @@ func (s *Service) Login(email, password string) (string, *models.User, error) {
 	}
 
 	return token, &user, nil
+}
+
+// SendLoginNotification resolves the IP location and emails the user asynchronously.
+func (s *Service) SendLoginNotification(email, firstName, ip string) {
+	location := mailer.LookupLocation(ip)
+	loginTime := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 UTC")
+	if err := s.mailer.SendLoginNotification(email, firstName, loginTime, ip, location); err != nil {
+		log.Printf("[auth] login notification failed for %s: %v", email, err)
+	}
 }
 
 // RegisterStudent allows a student to self-register using a school subdomain + matric number.

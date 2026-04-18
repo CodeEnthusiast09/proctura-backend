@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setup(t *testing.T) (svc *exam.Service, tenantID, courseID string) {
+func setup(t *testing.T) (svc *exam.Service, tenantID, courseID, studentID string) {
 	db := testutil.NewTestDB(t)
 	t.Cleanup(func() { testutil.CleanupTables(t, db) })
 
@@ -38,11 +38,32 @@ func setup(t *testing.T) (svc *exam.Service, tenantID, courseID string) {
 	}
 	require.NoError(t, db.Create(&course).Error)
 
-	return exam.NewService(db), tenant.ID, course.ID
+	matric := "CSC/2021/001"
+	student := models.User{
+		TenantID:     &tenant.ID,
+		Email:        "student@testuni.edu",
+		PasswordHash: "hash",
+		Role:         models.RoleStudent,
+		FirstName:    "John",
+		LastName:     "Doe",
+		MatricNumber: &matric,
+		IsActive:     true,
+		IsVerified:   true,
+	}
+	require.NoError(t, db.Create(&student).Error)
+
+	enrollment := models.CourseEnrollment{
+		TenantID:  tenant.ID,
+		CourseID:  course.ID,
+		StudentID: student.ID,
+	}
+	require.NoError(t, db.Create(&enrollment).Error)
+
+	return exam.NewService(db), tenant.ID, course.ID, student.ID
 }
 
 func TestCreateExam_Success(t *testing.T) {
-	svc, tenantID, courseID := setup(t)
+	svc, tenantID, courseID, _ := setup(t)
 
 	now := time.Now()
 	e, err := svc.CreateExam(exam.CreateExamInput{
@@ -62,14 +83,14 @@ func TestCreateExam_Success(t *testing.T) {
 }
 
 func TestGetExam_NotFound(t *testing.T) {
-	svc, tenantID, _ := setup(t)
+	svc, tenantID, _, _ := setup(t)
 
 	_, err := svc.GetExam(tenantID, "00000000-0000-0000-0000-000000000000")
 	assert.ErrorIs(t, err, exam.ErrExamNotFound)
 }
 
 func TestUpdateExam_OnlyDraftAllowed(t *testing.T) {
-	svc, tenantID, courseID := setup(t)
+	svc, tenantID, courseID, _ := setup(t)
 
 	now := time.Now()
 	e, err := svc.CreateExam(exam.CreateExamInput{
@@ -98,7 +119,7 @@ func TestUpdateExam_OnlyDraftAllowed(t *testing.T) {
 }
 
 func TestAddQuestion_Success(t *testing.T) {
-	svc, tenantID, courseID := setup(t)
+	svc, tenantID, courseID, _ := setup(t)
 
 	now := time.Now()
 	e, err := svc.CreateExam(exam.CreateExamInput{
@@ -120,7 +141,7 @@ func TestAddQuestion_Success(t *testing.T) {
 }
 
 func TestAddTestCase_Success(t *testing.T) {
-	svc, tenantID, courseID := setup(t)
+	svc, tenantID, courseID, _ := setup(t)
 
 	now := time.Now()
 	e, _ := svc.CreateExam(exam.CreateExamInput{
@@ -136,14 +157,17 @@ func TestAddTestCase_Success(t *testing.T) {
 	q, _ := svc.AddQuestion(e.ID, "Question body", 1, 10)
 
 	input := "hello"
-	tc, err := svc.AddTestCase(q.ID, &input, "olleh", false)
+	tcs, err := svc.AddTestCases(q.ID, []exam.TestCaseInput{
+		{Input: &input, ExpectedOutput: "olleh", IsHidden: false},
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "olleh", tc.ExpectedOutput)
-	assert.False(t, tc.IsHidden)
+	require.Len(t, tcs, 1)
+	assert.Equal(t, "olleh", tcs[0].ExpectedOutput)
+	assert.False(t, tcs[0].IsHidden)
 }
 
 func TestGetAvailableExams_ReturnsOnlyActiveWindow(t *testing.T) {
-	svc, tenantID, courseID := setup(t)
+	svc, tenantID, courseID, studentID := setup(t)
 
 	now := time.Now()
 
@@ -173,7 +197,7 @@ func TestGetAvailableExams_ReturnsOnlyActiveWindow(t *testing.T) {
 		LanguageName:    "Python 3",
 	})
 
-	exams, err := svc.GetAvailableExams(tenantID)
+	exams, err := svc.GetAvailableExams(tenantID, studentID)
 	require.NoError(t, err)
 	assert.Len(t, exams, 1)
 	assert.Equal(t, "Active Exam", exams[0].Title)

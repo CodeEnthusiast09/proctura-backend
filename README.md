@@ -35,8 +35,8 @@ Row-level multitenancy — every school is a **tenant** identified by subdomain.
 
 ```bash
 # 1. Clone and enter the project
-git clone <repo-url>
-cd proctura-backend
+git clone git@github.com:CodeEnthusiast09/proctora-backend.git
+cd proctora-backend
 
 # 2. Copy env file and fill in your values
 cp .env.example .env

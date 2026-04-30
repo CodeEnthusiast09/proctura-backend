@@ -1,4 +1,3 @@
-// internal/mailer/resend.go
 package mailer
 
 import (
@@ -25,11 +24,15 @@ func NewResendMailer(apiKey, from string) *ResendMailer {
 }
 
 func (m *ResendMailer) SendInvite(to, firstName, inviteLink string) error {
-	_, err := m.client.Emails.Send(&resend.SendEmailRequest{
+	html, err := renderTemplate("invite.html", inviteData{FirstName: firstName, InviteLink: inviteLink})
+	if err != nil {
+		return fmt.Errorf("render invite template: %w", err)
+	}
+	_, err = m.client.Emails.Send(&resend.SendEmailRequest{
 		From:    m.from,
 		To:      []string{to},
 		Subject: "You've been invited to Proctura",
-		Html:    inviteHTML(firstName, inviteLink),
+		Html:    html,
 	})
 	if err != nil {
 		return fmt.Errorf("resend send invite: %w", err)
@@ -38,11 +41,15 @@ func (m *ResendMailer) SendInvite(to, firstName, inviteLink string) error {
 }
 
 func (m *ResendMailer) SendPasswordReset(to, firstName, resetLink string) error {
-	_, err := m.client.Emails.Send(&resend.SendEmailRequest{
+	html, err := renderTemplate("reset_password.html", resetData{FirstName: firstName, ResetLink: resetLink})
+	if err != nil {
+		return fmt.Errorf("render reset template: %w", err)
+	}
+	_, err = m.client.Emails.Send(&resend.SendEmailRequest{
 		From:    m.from,
 		To:      []string{to},
 		Subject: "Reset your Proctura password",
-		Html:    resetHTML(firstName, resetLink),
+		Html:    html,
 	})
 	if err != nil {
 		return fmt.Errorf("resend send password reset: %w", err)
@@ -51,11 +58,20 @@ func (m *ResendMailer) SendPasswordReset(to, firstName, resetLink string) error 
 }
 
 func (m *ResendMailer) SendLoginNotification(to, firstName, loginTime, ip, location string) error {
-	_, err := m.client.Emails.Send(&resend.SendEmailRequest{
+	html, err := renderTemplate("login_notification.html", loginNotificationData{
+		FirstName: firstName,
+		LoginTime: loginTime,
+		IP:        ip,
+		Location:  location,
+	})
+	if err != nil {
+		return fmt.Errorf("render login notification template: %w", err)
+	}
+	_, err = m.client.Emails.Send(&resend.SendEmailRequest{
 		From:    m.from,
 		To:      []string{to},
 		Subject: "New sign-in to your Proctura account",
-		Html:    loginNotificationHTML(firstName, loginTime, ip, location),
+		Html:    html,
 	})
 	if err != nil {
 		return fmt.Errorf("resend send login notification: %w", err)
@@ -66,7 +82,6 @@ func (m *ResendMailer) SendLoginNotification(to, firstName, loginTime, ip, locat
 // LookupLocation attempts to resolve an IP address to "City, Country".
 // Falls back to "Unknown location" on any error.
 func LookupLocation(ip string) string {
-	// Skip private/loopback IPs
 	if ip == "" || strings.HasPrefix(ip, "127.") || strings.HasPrefix(ip, "::1") || strings.HasPrefix(ip, "192.168.") {
 		return "Local network"
 	}
@@ -87,95 +102,4 @@ func LookupLocation(ip string) string {
 		return "Unknown location"
 	}
 	return result.City + ", " + result.Country
-}
-
-// ── Email templates ───────────────────────────────────────────────────────────
-
-func inviteHTML(firstName, inviteLink string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="font-family:sans-serif;background:#f8fafc;padding:40px 0;margin:0">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e2e8f0">
-    <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 8px">
-      Welcome to Proctura, %s
-    </h1>
-    <p style="color:#64748b;font-size:15px;margin:0 0 28px;line-height:1.6">
-      You've been invited to join Proctura — an online coding exam platform.
-      Click the button below to set up your password and activate your account.
-    </p>
-    <a href="%s"
-       style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;
-              font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
-      Set Up Your Account
-    </a>
-    <p style="color:#94a3b8;font-size:12px;margin:28px 0 0;line-height:1.6">
-      This link expires in 7 days. If you didn't expect this invitation, you can safely ignore this email.
-    </p>
-  </div>
-</body>
-</html>`, firstName, inviteLink)
-}
-
-func loginNotificationHTML(firstName, loginTime, ip, location string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="font-family:sans-serif;background:#f8fafc;padding:40px 0;margin:0">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e2e8f0">
-    <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 8px">
-      New sign-in detected, %s
-    </h1>
-    <p style="color:#64748b;font-size:15px;margin:0 0 24px;line-height:1.6">
-      Your Proctura account was just signed into. Here are the details:
-    </p>
-    <table style="width:100%%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
-      <tr>
-        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#94a3b8;width:40%%">Time</td>
-        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500">%s</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#94a3b8">IP Address</td>
-        <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#0f172a;font-weight:500;font-family:monospace">%s</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 0;color:#94a3b8">Location</td>
-        <td style="padding:10px 0;color:#0f172a;font-weight:500">%s</td>
-      </tr>
-    </table>
-    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px">
-      <p style="color:#dc2626;font-size:14px;font-weight:600;margin:0 0 4px">Not you?</p>
-      <p style="color:#b91c1c;font-size:13px;margin:0;line-height:1.5">
-        If you didn't sign in, your account may be compromised. Change your password immediately.
-      </p>
-    </div>
-    <p style="color:#94a3b8;font-size:12px;margin:0;line-height:1.6">
-      If this was you, no action is needed.
-    </p>
-  </div>
-</body>
-</html>`, firstName, loginTime, ip, location)
-}
-
-func resetHTML(firstName, resetLink string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="font-family:sans-serif;background:#f8fafc;padding:40px 0;margin:0">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e2e8f0">
-    <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin:0 0 8px">
-      Reset your password, %s
-    </h1>
-    <p style="color:#64748b;font-size:15px;margin:0 0 28px;line-height:1.6">
-      We received a request to reset your Proctura password.
-      Click the button below to choose a new password.
-    </p>
-    <a href="%s"
-       style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;
-              font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none">
-      Reset Password
-    </a>
-    <p style="color:#94a3b8;font-size:12px;margin:28px 0 0;line-height:1.6">
-      This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
-    </p>
-  </div>
-</body>
-</html>`, firstName, resetLink)
 }

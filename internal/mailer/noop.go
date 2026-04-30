@@ -1,4 +1,3 @@
-// internal/mailer/noop.go
 package mailer
 
 import "log"

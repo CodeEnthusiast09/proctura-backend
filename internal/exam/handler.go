@@ -322,11 +322,11 @@ func (h *Handler) AddTestCase(c *gin.Context) {
 
 	inputs := make([]TestCaseInput, len(req))
 	for i, r := range req {
-		inputs[i] = TestCaseInput{
-			Input:          r.Input,
-			ExpectedOutput: r.ExpectedOutput,
-			IsHidden:       r.IsHidden,
-		}
+		// Type conversion is safe here because addTestCaseRequest and TestCaseInput
+		// are structurally identical. If the request struct ever gains fields the
+		// service does not need (e.g. client-side metadata), or the service gains
+		// fields sourced outside the request, switch back to explicit field mapping.
+		inputs[i] = TestCaseInput(r)
 	}
 
 	tcs, err := h.svc.AddTestCases(questionID, inputs)

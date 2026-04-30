@@ -7,6 +7,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/cloudinary"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/database"
@@ -14,6 +15,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/router"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/storage"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/submission"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/tenant"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/user"
@@ -41,14 +43,43 @@ func main() {
 
 	seedSuperAdmin(db, cfg)
 
-	// Mailer
+	// Mailer — Resend primary, SMTP fallback, no-op if neither configured
 	var m mailer.Mailer
+	var providers []mailer.Mailer
 	if cfg.Email.ResendAPIKey != "" {
-		m = mailer.NewResendMailer(cfg.Email.ResendAPIKey, cfg.Email.From)
-	} else {
-		log.Println("[mailer] no RESEND_API_KEY set — using no-op mailer")
-		m = &mailer.NoOpMailer{}
+		providers = append(providers, mailer.NewResendMailer(cfg.Email.ResendAPIKey, cfg.Email.From))
 	}
+	if cfg.SMTP.Host != "" && cfg.SMTP.User != "" {
+		providers = append(providers, mailer.NewSMTPMailer(
+			cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.User, cfg.SMTP.Password, cfg.Email.From,
+		))
+	}
+	switch len(providers) {
+	case 0:
+		log.Println("[mailer] no email provider configured — using no-op mailer")
+		m = &mailer.NoOpMailer{}
+	case 1:
+		m = providers[0]
+	default:
+		m = mailer.NewFallbackMailer(providers...)
+		log.Printf("[mailer] %d email providers configured (fallback chain active)", len(providers))
+	}
+
+	// Storage — Cloudinary primary, MinIO fallback for large files
+	cloudinaryClient := cloudinary.NewClient(cfg.Cloudinary)
+	minioProvider, err := storage.NewMinIOProvider(cfg.MinIO)
+	if err != nil {
+		log.Fatalf("minio init: %v", err)
+	}
+	if minioProvider != nil {
+		log.Println("[storage] MinIO configured — large recordings will route to MinIO")
+	} else {
+		log.Println("[storage] MinIO not configured — all recordings will use Cloudinary")
+	}
+	storageRouter := storage.NewRouter(
+		storage.NewCloudinaryProvider(cloudinaryClient),
+		minioProvider,
+	)
 
 	// Services
 	authSvc := auth.NewService(db, cfg, m)
@@ -66,7 +97,7 @@ func main() {
 		User:       user.NewHandler(userSvc),
 		Course:     course.NewHandler(courseSvc),
 		Exam:       exam.NewHandler(examSvc),
-		Submission: submission.NewHandler(submissionSvc),
+		Submission: submission.NewHandler(submissionSvc, storageRouter),
 	}
 
 	r := gin.Default()

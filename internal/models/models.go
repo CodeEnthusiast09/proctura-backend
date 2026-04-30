@@ -29,21 +29,21 @@ const (
 )
 
 type User struct {
-	ID              string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	TenantID        *string   `gorm:"type:uuid;index" json:"tenant_id,omitempty"` // null for super_admin
-	Email           string    `gorm:"uniqueIndex;not null" json:"email"`
-	PasswordHash    string    `gorm:"not null" json:"-"`
-	Role            UserRole  `gorm:"type:varchar(20);not null" json:"role"`
-	FirstName       string    `gorm:"not null" json:"first_name"`
-	LastName        string    `gorm:"not null" json:"last_name"`
-	MatricNumber    *string   `gorm:"index" json:"matric_number,omitempty"` // students only
-	IsActive        bool      `gorm:"default:true" json:"is_active"`
-	IsVerified      bool      `gorm:"default:false" json:"is_verified"`
-	InviteToken     *string   `gorm:"index" json:"-"`
-	ResetToken      *string   `gorm:"index" json:"-"`
+	ID               string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TenantID         *string    `gorm:"type:uuid;index" json:"tenant_id,omitempty"` // null for super_admin
+	Email            string     `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash     string     `gorm:"not null" json:"-"`
+	Role             UserRole   `gorm:"type:varchar(20);not null" json:"role"`
+	FirstName        string     `gorm:"not null" json:"first_name"`
+	LastName         string     `gorm:"not null" json:"last_name"`
+	MatricNumber     *string    `gorm:"index" json:"matric_number,omitempty"` // students only
+	IsActive         bool       `gorm:"default:true" json:"is_active"`
+	IsVerified       bool       `gorm:"default:false" json:"is_verified"`
+	InviteToken      *string    `gorm:"index" json:"-"`
+	ResetToken       *string    `gorm:"index" json:"-"`
 	ResetTokenExpiry *time.Time `json:"-"`
-	CreatedAt       time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedAt        time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 
 	Tenant *Tenant `gorm:"foreignKey:TenantID" json:"tenant,omitempty"`
 }
@@ -104,13 +104,13 @@ func (Exam) TableName() string { return "exams" }
 // ── Question ──────────────────────────────────────────────────────────────────
 
 type Question struct {
-	ID         string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	ExamID     string     `gorm:"type:uuid;not null;index" json:"exam_id"`
-	Body       string     `gorm:"type:text;not null" json:"body"`
-	OrderIndex int        `gorm:"not null;default:0" json:"order_index"`
-	Points     int        `gorm:"not null;default:10" json:"points"`
-	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ID         string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ExamID     string    `gorm:"type:uuid;not null;index" json:"exam_id"`
+	Body       string    `gorm:"type:text;not null" json:"body"`
+	OrderIndex int       `gorm:"not null;default:0" json:"order_index"`
+	Points     int       `gorm:"not null;default:10" json:"points"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	Exam      *Exam      `gorm:"foreignKey:ExamID" json:"exam,omitempty"`
 	TestCases []TestCase `gorm:"foreignKey:QuestionID" json:"test_cases,omitempty"`
@@ -155,6 +155,7 @@ type Submission struct {
 	TotalScore     int              `gorm:"default:0" json:"total_score"`
 	MaxScore       int              `gorm:"default:0" json:"max_score"`
 	ViolationCount int              `gorm:"default:0" json:"violation_count"`
+	RecordingURL   *string          `gorm:"type:text" json:"recording_url,omitempty"`
 	CreatedAt      time.Time        `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt      time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
 
@@ -168,19 +169,19 @@ func (Submission) TableName() string { return "submissions" }
 // ── SubmissionAnswer ──────────────────────────────────────────────────────────
 
 type SubmissionAnswer struct {
-	ID           string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	SubmissionID string         `gorm:"type:uuid;not null;index" json:"submission_id"`
-	QuestionID   string         `gorm:"type:uuid;not null" json:"question_id"`
-	Code         string         `gorm:"type:text" json:"code"`
-	Score        int            `gorm:"default:0" json:"score"`
-	Judge0Token  *string        `json:"-"` // Judge0 submission token
-	Stdout       *string        `gorm:"type:text" json:"stdout,omitempty"`
-	Stderr       *string        `gorm:"type:text" json:"stderr,omitempty"`
-	CompileOutput *string       `gorm:"type:text" json:"compile_output,omitempty"`
-	StatusDesc   *string        `json:"status_desc,omitempty"`
-	TestResults  string         `gorm:"type:text;default:''" json:"test_results,omitempty"`
-	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	ID            string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	SubmissionID  string    `gorm:"type:uuid;not null;index" json:"submission_id"`
+	QuestionID    string    `gorm:"type:uuid;not null" json:"question_id"`
+	Code          string    `gorm:"type:text" json:"code"`
+	Score         int       `gorm:"default:0" json:"score"`
+	Judge0Token   *string   `json:"-"` // Judge0 submission token
+	Stdout        *string   `gorm:"type:text" json:"stdout,omitempty"`
+	Stderr        *string   `gorm:"type:text" json:"stderr,omitempty"`
+	CompileOutput *string   `gorm:"type:text" json:"compile_output,omitempty"`
+	StatusDesc    *string   `json:"status_desc,omitempty"`
+	TestResults   string    `gorm:"type:text;default:''" json:"test_results,omitempty"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	Submission *Submission `gorm:"foreignKey:SubmissionID" json:"submission,omitempty"`
 	Question   *Question   `gorm:"foreignKey:QuestionID" json:"question,omitempty"`

@@ -1,4 +1,3 @@
-// internal/mailer/mailer.go
 package mailer
 
 // Mailer is the interface every email backend must satisfy.

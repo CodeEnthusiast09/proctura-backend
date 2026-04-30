@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
@@ -45,11 +46,9 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRole := c.GetString("role")
 
-		for _, r := range roles {
-			if userRole == r {
-				c.Next()
-				return
-			}
+		if slices.Contains(roles, userRole) {
+			c.Next()
+			return
 		}
 
 		response.Forbidden(c, "you do not have permission to perform this action")

@@ -7,12 +7,37 @@ import (
 )
 
 type Config struct {
-	Port   int
-	DB     DBConfig
-	JWT    JWTConfig
-	Judge0 Judge0Config
-	Email  EmailConfig
-	App    AppConfig
+	Port       int
+	DB         DBConfig
+	JWT        JWTConfig
+	Judge0     Judge0Config
+	Email      EmailConfig
+	Cloudinary CloudinaryConfig
+	MinIO      MinIOConfig
+	SMTP       SMTPConfig
+	App        AppConfig
+}
+
+type CloudinaryConfig struct {
+	CloudName string
+	APIKey    string
+	APISecret string
+}
+
+type MinIOConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	UseSSL    bool
+	PublicURL string
+}
+
+type SMTPConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
 }
 
 type DBConfig struct {
@@ -71,6 +96,25 @@ func Load() *Config {
 			From:         getEnv("EMAIL_FROM", "Proctura <noreply@proctura.com>"),
 			ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		},
+		Cloudinary: CloudinaryConfig{
+			CloudName: getEnv("CLOUDINARY_CLOUD_NAME", ""),
+			APIKey:    getEnv("CLOUDINARY_API_KEY", ""),
+			APISecret: getEnv("CLOUDINARY_API_SECRET", ""),
+		},
+		MinIO: MinIOConfig{
+			Endpoint:  getEnv("MINIO_ENDPOINT", ""),
+			AccessKey: getEnv("MINIO_ACCESS_KEY", ""),
+			SecretKey: getEnv("MINIO_SECRET_KEY", ""),
+			Bucket:    getEnv("MINIO_BUCKET", "proctura"),
+			UseSSL:    getEnvBool("MINIO_USE_SSL", false),
+			PublicURL: getEnv("MINIO_PUBLIC_URL", ""),
+		},
+		SMTP: SMTPConfig{
+			Host:     getEnv("SMTP_HOST", ""),
+			Port:     getEnv("SMTP_PORT", "587"),
+			User:     getEnv("SMTP_USER", ""),
+			Password: getEnv("SMTP_PASSWORD", ""),
+		},
 		App: AppConfig{
 			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:8080"),
 			FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
@@ -92,6 +136,13 @@ func getEnvInt(key string, fallback int) int {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
 		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		return v == "true" || v == "1"
 	}
 	return fallback
 }

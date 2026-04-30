@@ -5,15 +5,17 @@ import (
 	"strconv"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/response"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/storage"
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	svc *Service
+	svc     *Service
+	storage *storage.Router
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, storage *storage.Router) *Handler {
+	return &Handler{svc: svc, storage: storage}
 }
 
 func (h *Handler) StartExam(c *gin.Context) {
@@ -77,11 +79,18 @@ func (h *Handler) SaveAnswer(c *gin.Context) {
 	response.OK(c, "answer saved", answer)
 }
 
+type submitRequest struct {
+	RecordingURL *string `json:"recording_url"`
+}
+
 func (h *Handler) Submit(c *gin.Context) {
 	submissionID := c.Param("id")
 	studentID := c.GetString("userID")
 
-	sub, err := h.svc.Submit(submissionID, studentID)
+	var req submitRequest
+	_ = c.ShouldBindJSON(&req) // optional body — ignore parse errors
+
+	sub, err := h.svc.Submit(submissionID, studentID, req.RecordingURL)
 	if err != nil {
 		if errors.Is(err, ErrSubmissionNotFound) {
 			response.NotFound(c, err.Error())
@@ -261,6 +270,59 @@ func (h *Handler) OverrideAnswerScore(c *gin.Context) {
 	}
 
 	response.OK(c, "score updated", sub)
+}
+
+func (h *Handler) GetUploadToken(c *gin.Context) {
+	submissionID := c.Param("id")
+	studentID := c.GetString("userID")
+
+	if err := h.svc.OwnedByStudent(submissionID, studentID); err != nil {
+		if errors.Is(err, ErrSubmissionNotFound) {
+			response.NotFound(c, "submission not found")
+			return
+		}
+		response.InternalError(c, "failed to verify submission")
+		return
+	}
+
+	var sizeBytes int64
+	if s, err := strconv.ParseInt(c.Query("size"), 10, 64); err == nil {
+		sizeBytes = s
+	}
+
+	token, err := h.storage.Token(submissionID, sizeBytes)
+	if err != nil {
+		response.InternalError(c, "failed to generate upload token")
+		return
+	}
+
+	response.OK(c, "upload token generated", token)
+}
+
+type attachRecordingRequest struct {
+	RecordingURL string `json:"recording_url" binding:"required,url"`
+}
+
+func (h *Handler) AttachRecording(c *gin.Context) {
+	submissionID := c.Param("id")
+	studentID := c.GetString("userID")
+
+	var req attachRecordingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.svc.AttachRecording(submissionID, studentID, req.RecordingURL); err != nil {
+		if errors.Is(err, ErrSubmissionNotFound) {
+			response.NotFound(c, "submission not found")
+			return
+		}
+		response.InternalError(c, "failed to attach recording")
+		return
+	}
+
+	response.OK(c, "recording attached", nil)
 }
 
 type logViolationRequest struct {

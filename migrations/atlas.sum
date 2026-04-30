@@ -1,5 +1,6 @@
-h1:ZoEbhZlcjQChth+IFl3zGw5l8bkTVMHvX4IH7y6jyfE=
+h1:jyIQUSgYB0cIz6Kubj/izDJqdA7Ra+knDYqd4Ky5Lgs=
 20250101000000_initial_schema.sql h1:+qxJW8wI8sDmQ8txhuza9Dt1esp4WeDLq4L0mQKrATQ=
 20260417110722_alter_test_results_to_text.sql h1:RXditgRYHBd/uPyOGaWW82nykLCQnASdZYl2uTxVe+M=
 20260417131553_add_course_enrollments.sql h1:nhmdR+kzJK0eXSdDZ5zSRihYrwGbDnjh6R0UfRL+5rU=
 20260417131635_add_course_enrollments.sql h1:7ZSUBtFosIa0OYdWzqEeGU+sK8k6t9O9Kx+aMG/rA4I=
+20260424095352_add_recording_url_to_submission.sql h1:TWZGCHAtigoBjXNdFqyQGiLKKaI+swUrhH/3Q6YO7Kg=

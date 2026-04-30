@@ -174,7 +174,7 @@ func TestSubmit_Success(t *testing.T) {
 	svc := submission.NewService(db, nil)
 	sub, _ := svc.StartExam(tenantID, examID, studentID)
 
-	submitted, err := svc.Submit(sub.ID, studentID)
+	submitted, err := svc.Submit(sub.ID, studentID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusSubmitted, submitted.Status)
 	assert.NotNil(t, submitted.SubmittedAt)

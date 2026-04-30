@@ -137,6 +137,8 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		studentRoutes.GET("/exams/:id/my-submission", h.Submission.GetMySubmission)
 		studentRoutes.PUT("/submissions/:id/answer", h.Submission.SaveAnswer)
 		studentRoutes.POST("/submissions/:id/run", h.Submission.RunCode)
+		studentRoutes.GET("/submissions/:id/upload-token", h.Submission.GetUploadToken)
+		studentRoutes.PATCH("/submissions/:id/recording", h.Submission.AttachRecording)
 		studentRoutes.POST("/submissions/:id/submit", h.Submission.Submit)
 		studentRoutes.GET("/submissions/:id/result", h.Submission.GetResult)
 		studentRoutes.POST("/submissions/:id/violation", h.Submission.LogViolation)

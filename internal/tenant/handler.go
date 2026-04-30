@@ -32,13 +32,12 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	tenant, admin, err := h.svc.Create(CreateTenantInput{
-		Name:           req.Name,
-		Subdomain:      req.Subdomain,
-		AdminEmail:     req.AdminEmail,
-		AdminFirstName: req.AdminFirstName,
-		AdminLastName:  req.AdminLastName,
-	})
+	// Type conversion is safe here because createTenantRequest and CreateTenantInput
+	// are structurally identical. If the request struct ever gains fields that the
+	// service does not need (e.g. confirm email, agree to terms), or the service
+	// gains fields sourced outside the request (e.g. from auth context), switch
+	// back to an explicit field mapping.
+	tenant, admin, err := h.svc.Create(CreateTenantInput(req))
 	if err != nil {
 		if errors.Is(err, ErrSubdomainTaken) || errors.Is(err, ErrAdminEmailTaken) {
 			response.BadRequest(c, err.Error())

@@ -69,8 +69,21 @@ make run
 | `JUDGE0_API_HOST`       | RapidAPI host                            | `judge0-ce.p.rapidapi.com`       |
 | `SUPER_ADMIN_EMAIL`     | Super admin email (seeded on boot)       | `admin@proctura.com`             |
 | `SUPER_ADMIN_PASSWORD`  | Super admin password (seeded on boot)    | —                                |
-| `RESEND_API_KEY`        | Resend API key (login notification email)| —                                |
+| `RESEND_API_KEY`        | Resend API key (primary email provider)  | —                                |
 | `EMAIL_FROM`            | Sender address for transactional email   | `Proctura <noreply@proctura.com>`|
+| `SMTP_HOST`             | SMTP host (fallback email provider)      | `smtp.gmail.com`                 |
+| `SMTP_PORT`             | SMTP port                                | `587`                            |
+| `SMTP_USER`             | SMTP username                            | —                                |
+| `SMTP_PASSWORD`         | SMTP password                            | —                                |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (recordings < 100 MB) | —                             |
+| `CLOUDINARY_API_KEY`    | Cloudinary API key                       | —                                |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret                    | —                                |
+| `MINIO_ENDPOINT`        | MinIO endpoint (recordings ≥ 100 MB)     | `minio.example.com`              |
+| `MINIO_ACCESS_KEY`      | MinIO access key                         | —                                |
+| `MINIO_SECRET_KEY`      | MinIO secret key                         | —                                |
+| `MINIO_BUCKET`          | MinIO bucket name                        | `proctura`                       |
+| `MINIO_USE_SSL`         | Use HTTPS for MinIO                      | `false`                          |
+| `MINIO_PUBLIC_URL`      | Public base URL for MinIO objects        | `https://minio.example.com`      |
 | `FRONTEND_URL`          | Frontend app URL (used in email links)   | `http://localhost:3000`          |
 | `APP_BASE_URL`          | App base URL (CORS allowed origin)       | `http://localhost:8080`          |
 
@@ -155,7 +168,9 @@ Requires `Authorization: Bearer <token>` + `X-Tenant-Subdomain: <subdomain>` (lo
 | POST   | `/exams/:examID/start`            | Start an exam (creates submission)        |
 | PUT    | `/submissions/:id/answer`         | Save / update answer for a question       |
 | POST   | `/submissions/:id/run`            | Run code against visible test cases       |
-| POST   | `/submissions/:id/submit`         | Final submission (triggers grading)       |
+| GET    | `/submissions/:id/upload-token`   | Get a provider-routed upload token (`?size=<bytes>`) |
+| POST   | `/submissions/:id/submit`         | Final submission (recording attached separately)     |
+| PATCH  | `/submissions/:id/recording`      | Attach recording URL after background upload         |
 | GET    | `/submissions/:id/result`         | Poll for graded result                    |
 | POST   | `/submissions/:id/violation`      | Log anti-cheat violation (tab switch etc) |
 
@@ -187,18 +202,80 @@ Lecturers can manually override the auto-graded score for any answer:
 - Score is validated against the question's max points
 - `total_score` on the submission is recalculated automatically after each override
 
-## Login Notifications
+## Email
+
+Transactional emails use a **fallback chain** — if the primary provider fails, the next one is tried automatically:
+
+1. **Resend** (primary) — configure `RESEND_API_KEY`
+2. **SMTP** (fallback) — configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+
+If neither is configured, a no-op mailer is used (emails are silently dropped).
+
+### Login Notifications
 
 A security notification email is sent on every successful login:
 
 - Sent asynchronously (does not delay the login response)
 - Includes login time, IP address, and geolocation (city/country via ip-api.com)
 - Skips geolocation for private/loopback IPs
-- Powered by [Resend](https://resend.com) — configure `RESEND_API_KEY` and `EMAIL_FROM`
+
+## Exam Recordings
+
+Webcam recordings are captured in the browser during exams and uploaded directly to cloud storage after submission (background upload — students are not blocked waiting for it).
+
+Storage is routed by file size:
+
+| File size  | Provider   | Notes                              |
+|------------|------------|------------------------------------|
+| < 100 MB   | Cloudinary | Free tier; direct signed upload    |
+| ≥ 100 MB   | MinIO      | Self-hosted S3-compatible storage  |
+
+The frontend fetches a token from `GET /submissions/:id/upload-token?size=<bytes>`, uploads directly to the chosen provider, then PATCHes the submission with the recording URL via `PATCH /submissions/:id/recording`.
+
+> MinIO requires CORS configured on the server to allow `PUT` requests from the frontend origin.
+
+### Local MinIO setup
+
+**1. Start MinIO with Docker**
+
+```bash
+docker run -d \
+  --name proctura-minio \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  -e MINIO_API_CORS_ALLOW_ORIGIN="http://localhost:3000" \
+  -v ~/minio-data:/data \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
+**2. Install the MinIO client and create the bucket**
+
+```bash
+yay -S minio-client          # binary is named mcli on Arch
+mcli alias set local http://localhost:9000 minioadmin minioadmin
+mcli mb local/proctura
+```
+
+**3. Add to `.env`**
+
+```env
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=proctura
+MINIO_USE_SSL=false
+MINIO_PUBLIC_URL=http://localhost:9000
+```
+
+The MinIO web console is available at `http://localhost:9001` (login: `minioadmin` / `minioadmin`).
+
+> **Note:** Newer MinIO versions (post-2023) handle CORS via the `MINIO_API_CORS_ALLOW_ORIGIN` environment variable — the `mcli cors set` command is no longer supported.
 
 ## Anti-Cheat
 
-- Tab switching and clipboard events are detected on the frontend
+- Tab switching, window blur, fullscreen exit, and clipboard events are detected on the frontend
 - Each event calls `POST /submissions/:id/violation`
 - After **3 violations**, the submission is automatically submitted
 

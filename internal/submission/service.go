@@ -101,12 +101,12 @@ func (s *Service) SaveAnswer(submissionID, questionID, code string) (*models.Sub
 			QuestionID:   questionID,
 			Code:         code,
 		}
-		if err := s.db.Create(&answer).Error; err != nil {
-			return nil, fmt.Errorf("create answer: %w", err)
+		if createErr := s.db.Create(&answer).Error; createErr != nil {
+			return nil, fmt.Errorf("create answer: %w", createErr)
 		}
 	} else if err == nil {
-		if err := s.db.Model(&answer).Update("code", code).Error; err != nil {
-			return nil, fmt.Errorf("update answer: %w", err)
+		if updateErr := s.db.Model(&answer).Update("code", code).Error; updateErr != nil {
+			return nil, fmt.Errorf("update answer: %w", updateErr)
 		}
 	} else {
 		return nil, fmt.Errorf("get answer: %w", err)
@@ -116,7 +116,7 @@ func (s *Service) SaveAnswer(submissionID, questionID, code string) (*models.Sub
 }
 
 // Submit marks the exam as submitted and triggers Judge0 evaluation for all answers.
-func (s *Service) Submit(submissionID, studentID string) (*models.Submission, error) {
+func (s *Service) Submit(submissionID, studentID string, recordingURL *string) (*models.Submission, error) {
 	var sub models.Submission
 	if err := s.db.Preload("Answers").First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
 		return nil, ErrSubmissionNotFound
@@ -127,10 +127,14 @@ func (s *Service) Submit(submissionID, studentID string) (*models.Submission, er
 	}
 
 	now := time.Now()
-	if err := s.db.Model(&sub).Updates(map[string]any{
+	updates := map[string]any{
 		"status":       models.SubmissionStatusSubmitted,
 		"submitted_at": now,
-	}).Error; err != nil {
+	}
+	if recordingURL != nil && *recordingURL != "" {
+		updates["recording_url"] = *recordingURL
+	}
+	if err := s.db.Model(&sub).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("update submission: %w", err)
 	}
 
@@ -427,6 +431,32 @@ func (s *Service) OverrideAnswerScore(submissionID, answerID, lecturerID, role s
 	return &sub, nil
 }
 
+// IsInProgress checks whether a submission is still active, used by the handler
+// before issuing a Cloudinary upload signature.
+func (s *Service) IsInProgress(submissionID, studentID string) error {
+	var sub models.Submission
+	if err := s.db.First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
+		return ErrSubmissionNotFound
+	}
+	if sub.Status != models.SubmissionStatusInProgress {
+		return ErrSubmissionNotActive
+	}
+	return nil
+}
+
+// OwnedByStudent checks only that the submission exists and belongs to the student,
+// without requiring any particular status.
+func (s *Service) OwnedByStudent(submissionID, studentID string) error {
+	var sub models.Submission
+	if err := s.db.First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSubmissionNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 // LogViolation increments the violation count and auto-submits after 3 violations.
 func (s *Service) LogViolation(submissionID, studentID, reason string) (*models.Submission, error) {
 	var sub models.Submission
@@ -463,6 +493,19 @@ func (s *Service) LogViolation(submissionID, studentID, reason string) (*models.
 	}
 
 	return &sub, nil
+}
+
+// AttachRecording updates the recording URL on an already-submitted submission.
+// Called by the student's client after the background upload completes.
+func (s *Service) AttachRecording(submissionID, studentID, recordingURL string) error {
+	var sub models.Submission
+	if err := s.db.First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSubmissionNotFound
+		}
+		return err
+	}
+	return s.db.Model(&sub).Update("recording_url", recordingURL).Error
 }
 
 // gradeSubmission runs in a goroutine after final submit.

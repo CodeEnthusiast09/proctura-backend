@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/joho/godotenv"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/exam"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/models"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/queue"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/router"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/storage"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/submission"
@@ -37,33 +39,20 @@ func main() {
 	}
 
 	dsn := database.DSN(cfg.DB)
-	if err := database.RunMigrations("migrations", dsn); err != nil {
-		log.Fatalf("run migrations: %v", err)
+	if migrationErr := database.RunMigrations("migrations", dsn); migrationErr != nil {
+		log.Fatalf("run migrations: %v", migrationErr)
 	}
 
 	seedSuperAdmin(db, cfg)
 
-	// Mailer — Resend primary, SMTP fallback, no-op if neither configured
-	var m mailer.Mailer
-	var providers []mailer.Mailer
-	if cfg.Email.ResendAPIKey != "" {
-		providers = append(providers, mailer.NewResendMailer(cfg.Email.ResendAPIKey, cfg.Email.From))
-	}
-	if cfg.SMTP.Host != "" && cfg.SMTP.User != "" {
-		providers = append(providers, mailer.NewSMTPMailer(
-			cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.User, cfg.SMTP.Password, cfg.Email.From,
-		))
-	}
-	switch len(providers) {
-	case 0:
-		log.Println("[mailer] no email provider configured — using no-op mailer")
-		m = &mailer.NoOpMailer{}
-	case 1:
-		m = providers[0]
-	default:
-		m = mailer.NewFallbackMailer(providers...)
-		log.Printf("[mailer] %d email providers configured (fallback chain active)", len(providers))
-	}
+	// Async queue for email + grading. The API server only enqueues; the
+	// cmd/worker binary consumes and does the actual delivery / grading.
+	queueClient := queue.NewClient(cfg.Redis)
+	defer queueClient.Close()
+	log.Printf("[queue] enqueueing to redis %s", cfg.Redis.Addr)
+
+	// Services use a queue-backed mailer — sends never block the request path.
+	m := mailer.NewQueueMailer(queueClient)
 
 	// Storage — Cloudinary primary, MinIO fallback for large files
 	cloudinaryClient := cloudinary.NewClient(cfg.Cloudinary)
@@ -88,7 +77,8 @@ func main() {
 	courseSvc := course.NewService(db)
 	examSvc := exam.NewService(db)
 	judge0Client := submission.NewJudge0Client(cfg.Judge0)
-	submissionSvc := submission.NewService(db, judge0Client)
+	submissionSvc := submission.NewService(db, judge0Client).
+		WithGradingEnqueuer(queueClient)
 
 	// Handlers
 	h := router.Handlers{
@@ -98,6 +88,12 @@ func main() {
 		Course:     course.NewHandler(courseSvc),
 		Exam:       exam.NewHandler(examSvc),
 		Submission: submission.NewHandler(submissionSvc, storageRouter),
+	}
+
+	if mode := os.Getenv("GIN_MODE"); mode != "" {
+		gin.SetMode(mode)
+	} else {
+		gin.SetMode(gin.DebugMode)
 	}
 
 	r := gin.Default()

@@ -1,5 +1,7 @@
 # Binaries
 proctura-backend
+/bin/
+/main
 *.exe
 *.test
 

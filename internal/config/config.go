@@ -15,7 +15,14 @@ type Config struct {
 	Cloudinary CloudinaryConfig
 	MinIO      MinIOConfig
 	SMTP       SMTPConfig
+	Redis      RedisConfig
 	App        AppConfig
+}
+
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
 }
 
 type CloudinaryConfig struct {
@@ -114,6 +121,11 @@ func Load() *Config {
 			Port:     getEnv("SMTP_PORT", "587"),
 			User:     getEnv("SMTP_USER", ""),
 			Password: getEnv("SMTP_PASSWORD", ""),
+		},
+		Redis: RedisConfig{
+			Addr:     getEnv("REDIS_ADDR", "127.0.0.1:6379"),
+			Password: getEnv("REDIS_PASSWORD", ""),
+			DB:       getEnvInt("REDIS_DB", 0),
 		},
 		App: AppConfig{
 			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:8080"),

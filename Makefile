@@ -1,15 +1,21 @@
 # Proctura Backend — Makefile
 # Usage: make <target>
 
-.PHONY: run build test migrate-diff migrate-hash migrate-apply migrate-status migrate-validate clean
+.PHONY: run worker build test migrate-diff migrate-hash migrate-apply migrate-status migrate-validate clean
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 run:
 	go run ./cmd/main.go
 
+# Start the async queue worker (consumes email + grading jobs from Redis).
+# Run in a separate terminal alongside `make run`.
+worker:
+	go run ./cmd/worker
+
 build:
 	go build -o ./bin/proctura ./cmd/main.go
+	go build -o ./bin/proctura-worker ./cmd/worker
 
 clean:
 	rm -rf ./bin

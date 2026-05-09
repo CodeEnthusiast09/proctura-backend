@@ -2,6 +2,7 @@ package router
 
 import (
 	"os"
+	"time"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
@@ -12,6 +13,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/user"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 )
 
@@ -43,13 +45,23 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	api := r.Group("/api/v1")
 
 	// ── Public auth routes ─────────────────────────────────────────────────────
+	// Per-IP rate limits to slow down brute-force credential guessing,
+	// password-reset email spam, and bulk invite/register abuse. Each
+	// endpoint has its own limiter so a slow forgot-password user isn't
+	// blocked from logging in (and vice versa).
+	loginLimiter := middleware.PerIP(rate.Every(12*time.Second), 5)
+	forgotLimiter := middleware.PerIP(rate.Every(20*time.Second), 3)
+	resetLimiter := middleware.PerIP(rate.Every(12*time.Second), 5)
+	acceptInviteLimiter := middleware.PerIP(rate.Every(12*time.Second), 5)
+	registerLimiter := middleware.PerIP(rate.Every(20*time.Second), 3)
+
 	authRoutes := api.Group("/auth")
 	{
-		authRoutes.POST("/login", h.Auth.Login)
-		authRoutes.POST("/forgot-password", h.Auth.ForgotPassword)
-		authRoutes.POST("/reset-password", h.Auth.ResetPassword)
-		authRoutes.POST("/accept-invite", h.Auth.AcceptInvite)
-		authRoutes.POST("/register", h.Auth.RegisterStudent)
+		authRoutes.POST("/login", loginLimiter, h.Auth.Login)
+		authRoutes.POST("/forgot-password", forgotLimiter, h.Auth.ForgotPassword)
+		authRoutes.POST("/reset-password", resetLimiter, h.Auth.ResetPassword)
+		authRoutes.POST("/accept-invite", acceptInviteLimiter, h.Auth.AcceptInvite)
+		authRoutes.POST("/register", registerLimiter, h.Auth.RegisterStudent)
 	}
 
 	// ── Super admin routes (no tenant required) ────────────────────────────────

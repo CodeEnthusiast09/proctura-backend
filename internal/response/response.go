@@ -50,6 +50,10 @@ func InternalError(c interface{ JSON(int, any) }, message string) {
 	c.JSON(http.StatusInternalServerError, APIResponse{Success: false, Message: message})
 }
 
+func TooManyRequests(c interface{ JSON(int, any) }, message string) {
+	c.JSON(http.StatusTooManyRequests, APIResponse{Success: false, Message: message})
+}
+
 func Paginated(c interface{ JSON(int, any) }, message string, data any, meta Meta) {
 	c.JSON(http.StatusOK, PaginatedResponse{Success: true, Message: message, Data: data, Meta: meta})
 }

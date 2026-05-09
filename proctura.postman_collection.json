@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Proctura Backend",
-    "description": "API collection for Proctura — multitenancy online coding exam platform",
+    "description": "API collection for Proctura — multitenancy online coding exam platform.\n\nGroups follow the role model: super_admin, school_admin (view-only on academic content), lecturer (write), student (exam-only). Tenant-scoped requests need the X-Tenant-Subdomain header (or a real subdomain in production); /auth and /me work without it.",
     "_postman_id": "proctura-backend-v1",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -15,7 +15,9 @@
     { "key": "question_id", "value": "", "type": "string" },
     { "key": "test_case_id", "value": "", "type": "string" },
     { "key": "submission_id", "value": "", "type": "string" },
-    { "key": "user_id", "value": "", "type": "string" }
+    { "key": "answer_id", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" },
+    { "key": "student_id", "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -29,9 +31,12 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.data && res.data.token) {",
-                  "  pm.collectionVariables.set('token', res.data.token);",
-                  "  console.log('Token saved:', res.data.token.substring(0, 20) + '...');",
+                  "if (res.data && res.data.access_token) {",
+                  "  pm.collectionVariables.set('token', res.data.access_token);",
+                  "  if (res.data.user && res.data.user.subdomain) {",
+                  "    pm.collectionVariables.set('tenant_subdomain', res.data.user.subdomain);",
+                  "  }",
+                  "  console.log('Token saved:', res.data.access_token.substring(0, 20) + '...');",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -43,8 +48,14 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@proctura.com\",\n  \"password\": \"Admin@123456\"\n}"
+              "raw": "{\n  \"identifier\": \"admin@proctura.com\",\n  \"password\": \"Admin@123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
+            "description": "`identifier` accepts an email (any role) or a matric number (students only). Auto-detected by the presence of an `@` character.",
             "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
           }
         },
@@ -89,6 +100,24 @@
         },
         {
           "name": "Accept Invite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.access_token) {",
+                  "  pm.collectionVariables.set('token', res.data.access_token);",
+                  "  if (res.data.user && res.data.user.subdomain) {",
+                  "    pm.collectionVariables.set('tenant_subdomain', res.data.user.subdomain);",
+                  "  }",
+                  "  console.log('Activated and signed in. Token saved.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -96,7 +125,52 @@
               "mode": "raw",
               "raw": "{\n  \"token\": \"<invite_token_from_email>\",\n  \"first_name\": \"Chidi\",\n  \"last_name\": \"Okeke\",\n  \"password\": \"Lecturer@789\"\n}"
             },
+            "description": "Returns a JWT — invitee is auto-authenticated, no second login required.",
             "url": { "raw": "{{base_url}}/auth/accept-invite", "host": ["{{base_url}}"], "path": ["auth", "accept-invite"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile (any role)",
+      "description": "Self-service for the authenticated user. Mounted under /me — no tenant header required, so super_admin can use these too.",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Chidi\",\n  \"last_name\": \"Okeke\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"OldPass@123\",\n  \"new_password\": \"NewPass@456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/me/change-password", "host": ["{{base_url}}"], "path": ["me", "change-password"] }
           }
         }
       ]
@@ -116,6 +190,7 @@
                   "  pm.collectionVariables.set('tenant_id', res.data.tenant.id);",
                   "  pm.collectionVariables.set('tenant_subdomain', res.data.tenant.subdomain);",
                   "  console.log('Tenant ID saved:', res.data.tenant.id);",
+                  "  console.log('Admin invite token:', res.data.admin && res.data.admin.invite_token);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -167,6 +242,38 @@
           }
         },
         {
+          "name": "Bulk Activate / Deactivate Tenants",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"{{tenant_id}}\"],\n  \"is_active\": false\n}"
+            },
+            "description": "Toggle is_active for multiple tenants at once. Pass the desired state.",
+            "url": { "raw": "{{base_url}}/admin/tenants/bulk-active", "host": ["{{base_url}}"], "path": ["admin", "tenants", "bulk-active"] }
+          }
+        },
+        {
+          "name": "Recovery: Invite School Admin into Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"recovery-admin@unilag.edu.ng\",\n  \"first_name\": \"Aisha\",\n  \"last_name\": \"Bello\"\n}"
+            },
+            "description": "Used when both school admins of a tenant are unreachable. Capped at 2 active admins per tenant.",
+            "url": { "raw": "{{base_url}}/admin/tenants/{{tenant_id}}/invite-admin", "host": ["{{base_url}}"], "path": ["admin", "tenants", "{{tenant_id}}", "invite-admin"] }
+          }
+        },
+        {
           "name": "Delete Tenant",
           "request": {
             "method": "DELETE",
@@ -178,6 +285,7 @@
     },
     {
       "name": "School Admin — Users",
+      "description": "User management. school_admin role only — note the lecturer/student invite endpoints all live under this group.",
       "item": [
         {
           "name": "List Users",
@@ -188,14 +296,47 @@
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
             "url": {
-              "raw": "{{base_url}}/users?page=1&limit=20",
+              "raw": "{{base_url}}/users?role=lecturer&page=1&limit=20",
               "host": ["{{base_url}}"],
               "path": ["users"],
               "query": [
+                { "key": "role", "value": "lecturer", "description": "school_admin | lecturer | student" },
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "20" }
               ]
             }
+          }
+        },
+        {
+          "name": "Invite Co-Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('user_id', res.data.id);",
+                  "  console.log('Co-admin invite token:', res.data.invite_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"coadmin@unilag.edu.ng\",\n  \"first_name\": \"Aisha\",\n  \"last_name\": \"Bello\"\n}"
+            },
+            "description": "Capped at 2 active school admins per tenant. Returns 400 with `this school already has the maximum of 2 active admins` if exceeded.",
+            "url": { "raw": "{{base_url}}/users/invite-admin", "host": ["{{base_url}}"], "path": ["users", "invite-admin"] }
           }
         },
         {
@@ -206,8 +347,8 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.data && res.data.user) {",
-                  "  pm.collectionVariables.set('user_id', res.data.user.id);",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('user_id', res.data.id);",
                   "  console.log('Invite token:', res.data.invite_token);",
                   "}"
                 ],
@@ -227,6 +368,37 @@
               "raw": "{\n  \"email\": \"lecturer@unilag.edu.ng\",\n  \"first_name\": \"Ngozi\",\n  \"last_name\": \"Adeyemi\"\n}"
             },
             "url": { "raw": "{{base_url}}/users/invite-lecturer", "host": ["{{base_url}}"], "path": ["users", "invite-lecturer"] }
+          }
+        },
+        {
+          "name": "Invite Student (single)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set('student_id', res.data.id);",
+                  "  console.log('Student invite token:', res.data.invite_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"emeka@unilag.edu.ng\",\n  \"first_name\": \"Emeka\",\n  \"last_name\": \"Nwosu\",\n  \"matric_number\": \"CSC/2020/001\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/users/invite-student", "host": ["{{base_url}}"], "path": ["users", "invite-student"] }
           }
         },
         {
@@ -252,7 +424,7 @@
           }
         },
         {
-          "name": "Update User",
+          "name": "Update User (toggle active)",
           "request": {
             "method": "PUT",
             "header": [
@@ -264,7 +436,25 @@
               "mode": "raw",
               "raw": "{\n  \"is_active\": false\n}"
             },
+            "description": "Last-admin protection: rejected with 400 if it would leave 0 active school_admins.",
             "url": { "raw": "{{base_url}}/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["users", "{{user_id}}"] }
+          }
+        },
+        {
+          "name": "Bulk Activate / Deactivate Users",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"{{user_id}}\"],\n  \"is_active\": false\n}"
+            },
+            "description": "All-or-nothing: rejected with 400 if it would leave 0 active school_admins.",
+            "url": { "raw": "{{base_url}}/users/bulk-active", "host": ["{{base_url}}"], "path": ["users", "bulk-active"] }
           }
         },
         {
@@ -281,19 +471,9 @@
       ]
     },
     {
-      "name": "Shared",
+      "name": "Shared Reads (any role within tenant)",
+      "description": "Read-only endpoints accessible to all authenticated roles within a tenant.",
       "item": [
-        {
-          "name": "Get Me",
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
-            ],
-            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
-          }
-        },
         {
           "name": "List Courses",
           "request": {
@@ -342,6 +522,68 @@
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
             "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff Reads (school_admin + lecturer)",
+      "description": "Result and submission views shared between school_admin and lecturer.",
+      "item": [
+        {
+          "name": "Get Exam Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/results", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "results"] }
+          }
+        },
+        {
+          "name": "Get All Results (across exams)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/results?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["results"],
+              "query": [
+                { "key": "course_id", "value": "", "disabled": true },
+                { "key": "exam_id", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "in_progress | submitted | graded" },
+                { "key": "search", "value": "", "disabled": true, "description": "name or matric" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Submission Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}"] }
+          }
+        },
+        {
+          "name": "List Course Enrollments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/courses/{{course_id}}/enrollments", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}", "enrollments"] }
           }
         }
       ]
@@ -406,6 +648,33 @@
             ],
             "url": { "raw": "{{base_url}}/courses/{{course_id}}", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}"] }
           }
+        },
+        {
+          "name": "Enroll Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"matric_number\": \"CSC/2020/001\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/courses/{{course_id}}/enroll", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}", "enroll"] }
+          }
+        },
+        {
+          "name": "Unenroll Student",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/courses/{{course_id}}/enrollments/{{student_id}}", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}", "enrollments", "{{student_id}}"] }
+          }
         }
       ]
     },
@@ -454,9 +723,26 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Midterm Exam (Updated)\",\n  \"status\": \"scheduled\"\n}"
+              "raw": "{\n  \"title\": \"Midterm Exam (Updated)\",\n  \"instructions\": \"Solve all questions.\"\n}"
             },
             "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
+          }
+        },
+        {
+          "name": "Update Exam Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "description": "Status transitions: draft → scheduled → active → closed.",
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/status", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "status"] }
           }
         },
         {
@@ -468,17 +754,6 @@
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
             "url": { "raw": "{{base_url}}/exams/{{exam_id}}", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}"] }
-          }
-        },
-        {
-          "name": "Get Exam Results",
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
-            ],
-            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/results", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "results"] }
           }
         }
       ]
@@ -550,16 +825,16 @@
       "name": "Lecturer — Test Cases",
       "item": [
         {
-          "name": "Add Test Case (Visible)",
+          "name": "Add Test Cases (bulk)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
-                  "if (res.data && res.data.id) {",
-                  "  pm.collectionVariables.set('test_case_id', res.data.id);",
-                  "  console.log('Test Case ID saved:', res.data.id);",
+                  "if (res.data && res.data[0] && res.data[0].id) {",
+                  "  pm.collectionVariables.set('test_case_id', res.data[0].id);",
+                  "  console.log('First test case ID saved:', res.data[0].id);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -575,24 +850,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"input\": \"hello\",\n  \"expected_output\": \"olleh\",\n  \"is_hidden\": false\n}"
+              "raw": "[\n  { \"input\": \"hello\", \"expected_output\": \"olleh\", \"is_hidden\": false },\n  { \"input\": \"abcdef\", \"expected_output\": \"fedcba\", \"is_hidden\": true }\n]"
             },
-            "url": { "raw": "{{base_url}}/questions/{{question_id}}/test-cases", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}", "test-cases"] }
-          }
-        },
-        {
-          "name": "Add Test Case (Hidden)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"input\": \"abcdef\",\n  \"expected_output\": \"fedcba\",\n  \"is_hidden\": true\n}"
-            },
+            "description": "Body is an array — multiple test cases per call. Visible test cases (`is_hidden: false`) are shown to students; hidden ones run during grading only.",
             "url": { "raw": "{{base_url}}/questions/{{question_id}}/test-cases", "host": ["{{base_url}}"], "path": ["questions", "{{question_id}}", "test-cases"] }
           }
         },
@@ -626,6 +886,28 @@
       ]
     },
     {
+      "name": "Lecturer — Grading",
+      "item": [
+        {
+          "name": "Override Answer Score",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"score\": 18\n}"
+            },
+            "description": "Manual score override for one answer in a submission. Lecturer-only.",
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/answers/{{answer_id}}/score", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "answers", "{{answer_id}}", "score"] }
+          }
+        }
+      ]
+    },
+    {
       "name": "Student — Exam Flow",
       "item": [
         {
@@ -636,7 +918,19 @@
               { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
+            "description": "Currently-active exams the student is enrolled in.",
             "url": { "raw": "{{base_url}}/exams/available", "host": ["{{base_url}}"], "path": ["exams", "available"] }
+          }
+        },
+        {
+          "name": "List My Submissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "url": { "raw": "{{base_url}}/my-submissions", "host": ["{{base_url}}"], "path": ["my-submissions"] }
           }
         },
         {
@@ -666,6 +960,18 @@
           }
         },
         {
+          "name": "Get My Submission for Exam",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "description": "Used by the start page to detect a previously-started in-progress submission and offer Resume.",
+            "url": { "raw": "{{base_url}}/exams/{{exam_id}}/my-submission", "host": ["{{base_url}}"], "path": ["exams", "{{exam_id}}", "my-submission"] }
+          }
+        },
+        {
           "name": "Save Answer",
           "request": {
             "method": "PUT",
@@ -682,6 +988,59 @@
           }
         },
         {
+          "name": "Run Code (visible test cases)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question_id\": \"{{question_id}}\",\n  \"code\": \"def reverse_string(s):\\n    return s[::-1]\\nprint(reverse_string(input()))\"\n}"
+            },
+            "description": "Runs the code against the visible (non-hidden) test cases only. Does not affect the saved answer.",
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/run", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "run"] }
+          }
+        },
+        {
+          "name": "Get Upload Token (recording)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "description": "Returns a Cloudinary or MinIO signed upload token for the student's webcam recording.",
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/upload-token?size=2097152",
+              "host": ["{{base_url}}"],
+              "path": ["submissions", "{{submission_id}}", "upload-token"],
+              "query": [
+                { "key": "size", "value": "2097152", "description": "blob size in bytes (router uses this to pick provider)" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Attach Recording URL",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recording_url\": \"https://res.cloudinary.com/.../proctura/recordings/recording-abc.webm\"\n}"
+            },
+            "description": "Called after the browser uploads the webm directly to Cloudinary/MinIO with the signed token.",
+            "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/recording", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "recording"] }
+          }
+        },
+        {
           "name": "Submit Exam",
           "request": {
             "method": "POST",
@@ -689,6 +1048,7 @@
               { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
+            "description": "Marks submission as submitted and enqueues grading via asynq. Poll /submissions/:id/result for the score.",
             "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/submit", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "submit"] }
           }
         },
@@ -700,6 +1060,7 @@
               { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
             ],
+            "description": "If the lecturer hasn't released results, total/max score and per-answer scores come back zeroed.",
             "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/result", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "result"] }
           }
         },
@@ -716,6 +1077,7 @@
               "mode": "raw",
               "raw": "{\n  \"reason\": \"tab_switch\"\n}"
             },
+            "description": "Reasons: tab_switch | window_switch | fullscreen_exit | copy | paste. Auto-submits after 3.",
             "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/violation", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "violation"] }
           }
         }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
@@ -22,6 +23,7 @@ var (
 	ErrEmailTaken         = errors.New("email already in use")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrTenantNotFound     = errors.New("school not found")
+	ErrTenantInactive     = errors.New("school account is inactive — contact support")
 )
 
 type Service struct {
@@ -35,14 +37,26 @@ func NewService(db *gorm.DB, cfg *config.Config, m mailer.Mailer) *Service {
 }
 
 // Login validates credentials and returns a signed JWT.
-func (s *Service) Login(email, password string) (string, *models.User, error) {
+// `identifier` may be either an email or a student matric number.
+func (s *Service) Login(identifier, password string) (string, *models.User, error) {
 	var user models.User
 
-	if err := s.db.Preload("Tenant").Where("email = ?", email).First(&user).Error; err != nil {
+	query := s.db.Preload("Tenant")
+	if strings.Contains(identifier, "@") {
+		query = query.Where("email = ?", identifier)
+	} else {
+		query = query.Where("matric_number = ? AND role = ?", identifier, models.RoleStudent)
+	}
+
+	if err := query.First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil, ErrInvalidCredentials
 		}
 		return "", nil, fmt.Errorf("get user: %w", err)
+	}
+
+	if user.Tenant != nil && !user.Tenant.IsActive {
+		return "", nil, ErrTenantInactive
 	}
 
 	if !user.IsActive {
@@ -177,16 +191,17 @@ func (s *Service) ResetPassword(token, newPassword string) error {
 	return nil
 }
 
-// AcceptInvite sets name + password for an invited lecturer/school_admin and marks them verified.
-func (s *Service) AcceptInvite(token, firstName, lastName, password string) (*models.User, error) {
+// AcceptInvite sets name + password for an invited user, marks them verified,
+// and returns a signed JWT so the user is auto-authenticated.
+func (s *Service) AcceptInvite(token, firstName, lastName, password string) (string, *models.User, error) {
 	var user models.User
-	if err := s.db.Where("invite_token = ?", token).First(&user).Error; err != nil {
-		return nil, ErrInvalidToken
+	if err := s.db.Where("invite_token = ?", token).Preload("Tenant").First(&user).Error; err != nil {
+		return "", nil, ErrInvalidToken
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
+		return "", nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	if err := s.db.Model(&user).Updates(map[string]any{
@@ -196,10 +211,20 @@ func (s *Service) AcceptInvite(token, firstName, lastName, password string) (*mo
 		"is_verified":   true,
 		"invite_token":  nil,
 	}).Error; err != nil {
-		return nil, fmt.Errorf("accept invite: %w", err)
+		return "", nil, fmt.Errorf("accept invite: %w", err)
 	}
 
-	return &user, nil
+	tenantID := ""
+	if user.TenantID != nil {
+		tenantID = *user.TenantID
+	}
+
+	jwt, err := GenerateToken(user.ID, tenantID, user.Email, string(user.Role), s.cfg.JWT.Secret, s.cfg.JWT.Expiration)
+	if err != nil {
+		return "", nil, fmt.Errorf("generate token: %w", err)
+	}
+
+	return jwt, &user, nil
 }
 
 func generateSecureToken() (string, error) {

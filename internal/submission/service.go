@@ -20,13 +20,43 @@ var (
 	ErrNotEnrolled         = errors.New("you are not enrolled in this course")
 )
 
+// GradingEnqueuer is the slim interface the submission service needs to push
+// grading work onto the async queue. Defined here so the package doesn't need
+// to import internal/queue (which would create a cycle once queue handlers
+// call back into the submission service).
+type GradingEnqueuer interface {
+	EnqueueGradeSubmission(submissionID string) error
+}
+
 type Service struct {
-	db     *gorm.DB
-	judge0 *Judge0Client
+	db       *gorm.DB
+	judge0   *Judge0Client
+	enqueuer GradingEnqueuer // optional — if nil, grading runs inline in a goroutine
 }
 
 func NewService(db *gorm.DB, judge0 *Judge0Client) *Service {
 	return &Service{db: db, judge0: judge0}
+}
+
+// WithGradingEnqueuer wires the queue client used to dispatch grading jobs.
+// Call this on the API-server instance; leave unset on the worker (the worker
+// is the consumer, not a producer).
+func (s *Service) WithGradingEnqueuer(e GradingEnqueuer) *Service {
+	s.enqueuer = e
+	return s
+}
+
+// dispatchGrading hands a submission off for grading — either via the queue
+// (preferred, durable) or as a best-effort inline goroutine (fallback when
+// the queue isn't wired or refuses the enqueue).
+func (s *Service) dispatchGrading(submissionID string) {
+	if s.enqueuer != nil {
+		if err := s.enqueuer.EnqueueGradeSubmission(submissionID); err == nil {
+			return
+		}
+		// Fall through to inline if enqueue fails — better than losing the grade.
+	}
+	go func() { _ = s.GradeSubmission(submissionID) }()
 }
 
 // StartExam creates a submission record when a student begins an exam.
@@ -138,14 +168,7 @@ func (s *Service) Submit(submissionID, studentID string, recordingURL *string) (
 		return nil, fmt.Errorf("update submission: %w", err)
 	}
 
-	// Fetch exam language
-	var exam models.Exam
-	if err := s.db.First(&exam, "id = ?", sub.ExamID).Error; err != nil {
-		return nil, fmt.Errorf("get exam: %w", err)
-	}
-
-	// Submit each answer to Judge0 asynchronously
-	go s.gradeSubmission(&sub, exam.LanguageID)
+	s.dispatchGrading(sub.ID)
 
 	return &sub, nil
 }
@@ -346,13 +369,22 @@ func (s *Service) GetMySubmission(examID, studentID string) (*models.Submission,
 // GetResult returns a submission with all answers and scores.
 func (s *Service) GetResult(submissionID, studentID string) (*models.Submission, error) {
 	var sub models.Submission
-	if err := s.db.Preload("Answers").
+	if err := s.db.Preload("Answers").Preload("Exam").
 		First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSubmissionNotFound
 		}
 		return nil, fmt.Errorf("get submission: %w", err)
 	}
+
+	if sub.Exam != nil && !sub.Exam.ResultsReleased {
+		sub.TotalScore = 0
+		sub.MaxScore = 0
+		for i := range sub.Answers {
+			sub.Answers[i].Score = 0
+		}
+	}
+
 	return &sub, nil
 }
 
@@ -472,20 +504,20 @@ func (s *Service) LogViolation(submissionID, studentID, reason string) (*models.
 	updates := map[string]any{"violation_count": newCount}
 
 	// Auto-submit after 3 violations
+	autoSubmitted := false
 	if newCount >= 3 {
 		now := time.Now()
 		updates["status"] = models.SubmissionStatusSubmitted
 		updates["submitted_at"] = now
-
-		var exam models.Exam
-		if err := s.db.First(&exam, "id = ?", sub.ExamID).Error; err == nil {
-			sub.Status = models.SubmissionStatusInProgress
-			go s.gradeSubmission(&sub, exam.LanguageID)
-		}
+		autoSubmitted = true
 	}
 
 	if err := s.db.Model(&sub).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("log violation: %w", err)
+	}
+
+	if autoSubmitted {
+		s.dispatchGrading(sub.ID)
 	}
 
 	if err := s.db.First(&sub, "id = ?", submissionID).Error; err != nil {
@@ -508,12 +540,25 @@ func (s *Service) AttachRecording(submissionID, studentID, recordingURL string) 
 	return s.db.Model(&sub).Update("recording_url", recordingURL).Error
 }
 
-// gradeSubmission runs in a goroutine after final submit.
-// For each answer, it submits to Judge0 and checks against all test cases.
-func (s *Service) gradeSubmission(sub *models.Submission, languageID int) {
+// GradeSubmission loads the submission and runs each answer through Judge0,
+// recording per-answer scores and the cumulative total. Idempotent: re-running
+// recomputes scores against current test cases. Designed to be queue-callable
+// — takes only an ID so the caller (worker handler) doesn't need DB context.
+func (s *Service) GradeSubmission(submissionID string) error {
+	var sub models.Submission
+	if err := s.db.First(&sub, "id = ?", submissionID).Error; err != nil {
+		return fmt.Errorf("load submission: %w", err)
+	}
+
+	var exam models.Exam
+	if err := s.db.First(&exam, "id = ?", sub.ExamID).Error; err != nil {
+		return fmt.Errorf("load exam: %w", err)
+	}
+	languageID := exam.LanguageID
+
 	var answers []models.SubmissionAnswer
 	if err := s.db.Where("submission_id = ?", sub.ID).Find(&answers).Error; err != nil {
-		return
+		return fmt.Errorf("load answers: %w", err)
 	}
 
 	totalScore := 0
@@ -550,10 +595,13 @@ func (s *Service) gradeSubmission(sub *models.Submission, languageID int) {
 		totalScore += pointsEarned
 	}
 
-	s.db.Model(sub).Updates(map[string]any{
+	if err := s.db.Model(&sub).Updates(map[string]any{
 		"status":      models.SubmissionStatusGraded,
 		"total_score": totalScore,
-	})
+	}).Error; err != nil {
+		return fmt.Errorf("finalize grading: %w", err)
+	}
+	return nil
 }
 
 type testCaseResult struct {

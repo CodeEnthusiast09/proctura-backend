@@ -178,9 +178,10 @@ func TestAcceptInvite_Success(t *testing.T) {
 	require.NoError(t, db.Create(&user).Error)
 
 	svc := auth.NewService(db, testCfg(), &mailer.NoOpMailer{})
-	updated, err := svc.AcceptInvite(token, "Jane", "Smith", "securepass")
+	jwt, updated, err := svc.AcceptInvite(token, "Jane", "Smith", "securepass")
 
 	require.NoError(t, err)
+	assert.NotEmpty(t, jwt)
 	assert.True(t, updated.IsVerified)
 	assert.Equal(t, "Jane", updated.FirstName)
 }

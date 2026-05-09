@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"net/http"
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/response"
 	"github.com/gin-gonic/gin"
@@ -18,9 +17,10 @@ func NewHandler(svc *Service) *Handler {
 
 // Login godoc
 // POST /auth/login
+// Identifier accepts either an email (staff + students) or a matric number (students).
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Identifier string `json:"identifier" binding:"required"`
+	Password   string `json:"password" binding:"required"`
 }
 
 func (h *Handler) Login(c *gin.Context) {
@@ -30,13 +30,13 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.svc.Login(req.Email, req.Password)
+	token, user, err := h.svc.Login(req.Identifier, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			response.Unauthorized(c, err.Error())
 			return
 		}
-		if errors.Is(err, ErrAccountInactive) || errors.Is(err, ErrAccountUnverified) {
+		if errors.Is(err, ErrAccountInactive) || errors.Is(err, ErrAccountUnverified) || errors.Is(err, ErrTenantInactive) {
 			response.Forbidden(c, err.Error())
 			return
 		}
@@ -169,7 +169,7 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 		return
 	}
 
-	user, err := h.svc.AcceptInvite(req.Token, req.FirstName, req.LastName, req.Password)
+	token, user, err := h.svc.AcceptInvite(req.Token, req.FirstName, req.LastName, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidToken) {
 			response.BadRequest(c, err.Error())
@@ -179,13 +179,21 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "account activated successfully — you can now log in",
-		"data": gin.H{
-			"id":    user.ID,
-			"email": user.Email,
-			"role":  user.Role,
+	var subdomain *string
+	if user.Tenant != nil {
+		subdomain = &user.Tenant.Subdomain
+	}
+
+	response.OK(c, "account activated successfully", gin.H{
+		"access_token": token,
+		"user": gin.H{
+			"id":         user.ID,
+			"email":      user.Email,
+			"role":       user.Role,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"tenant_id":  user.TenantID,
+			"subdomain":  subdomain,
 		},
 	})
 }

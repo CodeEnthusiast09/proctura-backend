@@ -33,6 +33,111 @@ func (h *Handler) Me(c *gin.Context) {
 	response.OK(c, "profile retrieved", user)
 }
 
+// UpdateMe godoc
+// PATCH /me
+type updateMeRequest struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+func (h *Handler) UpdateMe(c *gin.Context) {
+	userID := c.GetString("userID")
+
+	var req updateMeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	user, err := h.svc.UpdateMe(userID, req.FirstName, req.LastName)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to update profile")
+		return
+	}
+
+	response.OK(c, "profile updated", user)
+}
+
+// ChangePassword godoc
+// POST /me/change-password
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=8"`
+}
+
+func (h *Handler) ChangePassword(c *gin.Context) {
+	userID := c.GetString("userID")
+
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.svc.ChangePassword(userID, req.CurrentPassword, req.NewPassword); err != nil {
+		if errors.Is(err, ErrCurrentPasswordWrong) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrUserNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to change password")
+		return
+	}
+
+	response.OK(c, "password changed", nil)
+}
+
+// InviteAdmin godoc
+// POST /users/invite-admin (school_admin scope) — invite a co-admin in your tenant
+// POST /admin/tenants/:id/invite-admin (super_admin scope) — recovery invite
+type inviteAdminRequest struct {
+	Email     string `json:"email" binding:"required,email"`
+	FirstName string `json:"first_name" binding:"required"`
+	LastName  string `json:"last_name" binding:"required"`
+}
+
+func (h *Handler) InviteAdmin(c *gin.Context) {
+	var req inviteAdminRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	// Tenant ID comes either from the resolved tenant (school_admin route) or
+	// from the URL param (super_admin recovery route).
+	tenantID := c.GetString("tenantID")
+	if id := c.Param("id"); id != "" {
+		tenantID = id
+	}
+	if tenantID == "" {
+		response.BadRequest(c, "tenant id is required")
+		return
+	}
+
+	user, token, err := h.svc.InviteAdmin(tenantID, req.Email, req.FirstName, req.LastName)
+	if err != nil {
+		if errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrAdminLimitReached) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to invite admin")
+		return
+	}
+
+	response.Created(c, "admin invited — they will receive an email to set up their account", gin.H{
+		"id":           user.ID,
+		"email":        user.Email,
+		"invite_token": token,
+	})
+}
+
 // InviteLecturer godoc
 // POST /users/invite
 type inviteLecturerRequest struct {
@@ -169,6 +274,10 @@ func (h *Handler) Update(c *gin.Context) {
 			response.NotFound(c, err.Error())
 			return
 		}
+		if errors.Is(err, ErrLastAdminProtected) {
+			response.BadRequest(c, err.Error())
+			return
+		}
 		response.InternalError(c, "failed to update user")
 		return
 	}
@@ -185,6 +294,10 @@ func (h *Handler) Delete(c *gin.Context) {
 	if err := h.svc.Delete(tenantID, userID); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrLastAdminProtected) {
+			response.BadRequest(c, err.Error())
 			return
 		}
 		response.InternalError(c, "failed to delete user")

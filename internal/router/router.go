@@ -61,6 +61,18 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		superAdmin.GET("/tenants", h.Tenant.List)
 		superAdmin.PUT("/tenants/:id", h.Tenant.Update)
 		superAdmin.DELETE("/tenants/:id", h.Tenant.Delete)
+		// Recovery: invite a school admin into any tenant
+		superAdmin.POST("/tenants/:id/invite-admin", h.User.InviteAdmin)
+	}
+
+	// ── Authenticated user (no tenant required) ───────────────────────────────
+	// Profile self-service works for super_admin (no tenant) too.
+	meRoutes := api.Group("/me")
+	meRoutes.Use(middleware.Authenticate(jwtSecret))
+	{
+		meRoutes.GET("", h.User.Me)
+		meRoutes.PATCH("", h.User.UpdateMe)
+		meRoutes.POST("/change-password", h.User.ChangePassword)
 	}
 
 	// ── Tenant-scoped routes ───────────────────────────────────────────────────
@@ -74,6 +86,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	{
 		// User management
 		adminRoutes.GET("/users", h.User.List)
+		adminRoutes.POST("/users/invite-admin", h.User.InviteAdmin)
 		adminRoutes.POST("/users/invite-lecturer", h.User.InviteLecturer)
 		adminRoutes.POST("/users/invite-student", h.User.InviteStudent)
 		adminRoutes.POST("/users/import-students", h.User.ImportStudents)
@@ -101,6 +114,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		lecturerRoutes.PATCH("/exams/:id/status", h.Exam.UpdateExamStatus)
 		lecturerRoutes.DELETE("/exams/:id", h.Exam.DeleteExam)
 		lecturerRoutes.GET("/exams/:id/results", h.Exam.GetResults)
+		lecturerRoutes.PATCH("/exams/:id/release-results", h.Exam.ReleaseResults)
 		lecturerRoutes.GET("/results", h.Submission.GetAllResults)
 		lecturerRoutes.GET("/submissions/:id", h.Submission.GetSubmissionDetail)
 		lecturerRoutes.PATCH("/submissions/:id/answers/:answerId/score", h.Submission.OverrideAnswerScore)
@@ -116,10 +130,9 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		lecturerRoutes.DELETE("/test-cases/:id", h.Exam.DeleteTestCase)
 	}
 
-	// Shared authenticated routes (all roles)
+	// Shared authenticated routes (all roles within a tenant)
 	sharedRoutes := tenantRoutes.Group("")
 	{
-		sharedRoutes.GET("/me", h.User.Me)
 		sharedRoutes.GET("/courses", h.Course.List)
 		sharedRoutes.GET("/exams", h.Exam.ListExams)
 		sharedRoutes.GET("/exams/:id", h.Exam.GetExam)

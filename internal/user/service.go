@@ -15,9 +15,14 @@ import (
 )
 
 var (
-	ErrUserNotFound = errors.New("user not found")
-	ErrEmailTaken   = errors.New("email already in use")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrEmailTaken          = errors.New("email already in use")
+	ErrAdminLimitReached   = errors.New("this school already has the maximum of 2 active admins — deactivate one first")
+	ErrLastAdminProtected  = errors.New("cannot deactivate or remove the last active school admin")
+	ErrCurrentPasswordWrong = errors.New("current password is incorrect")
 )
+
+const maxAdminsPerTenant = 2
 
 type Service struct {
 	db          *gorm.DB
@@ -27,6 +32,59 @@ type Service struct {
 
 func NewService(db *gorm.DB, m mailer.Mailer, frontendURL string) *Service {
 	return &Service{db: db, mailer: m, frontendURL: frontendURL}
+}
+
+// InviteAdmin creates an unverified school_admin account, capped at 2 active
+// admins per tenant. Used both for school_admin co-admin invites and super_admin
+// recovery invites.
+func (s *Service) InviteAdmin(tenantID, email, firstName, lastName string) (*models.User, string, error) {
+	var activeAdmins int64
+	if err := s.db.Model(&models.User{}).
+		Where("tenant_id = ? AND role = ? AND is_active = true", tenantID, models.RoleSchoolAdmin).
+		Count(&activeAdmins).Error; err != nil {
+		return nil, "", fmt.Errorf("count admins: %w", err)
+	}
+	if activeAdmins >= maxAdminsPerTenant {
+		return nil, "", ErrAdminLimitReached
+	}
+
+	var existing models.User
+	if err := s.db.Where("email = ?", email).First(&existing).Error; err == nil {
+		return nil, "", ErrEmailTaken
+	}
+
+	tempHash, err := bcrypt.GenerateFromPassword([]byte("invite-pending"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, "", fmt.Errorf("hash temp password: %w", err)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		return nil, "", fmt.Errorf("generate invite token: %w", err)
+	}
+
+	user := models.User{
+		TenantID:     &tenantID,
+		Email:        email,
+		PasswordHash: string(tempHash),
+		Role:         models.RoleSchoolAdmin,
+		FirstName:    firstName,
+		LastName:     lastName,
+		IsActive:     true,
+		IsVerified:   false,
+		InviteToken:  &token,
+	}
+
+	if err := s.db.Create(&user).Error; err != nil {
+		return nil, "", fmt.Errorf("create admin: %w", err)
+	}
+
+	inviteLink := fmt.Sprintf("%s/accept-invite?token=%s", s.frontendURL, token)
+	if err := s.mailer.SendInvite(user.Email, user.FirstName, inviteLink); err != nil {
+		fmt.Printf("[mailer] failed to send invite to %s: %v\n", user.Email, err)
+	}
+
+	return &user, token, nil
 }
 
 // InviteLecturer creates an unverified lecturer account with an invite token.
@@ -207,7 +265,8 @@ func (s *Service) List(tenantID, role string, page, limit int) ([]models.User, i
 	return users, total, nil
 }
 
-// Update updates a user's active status or role within a tenant.
+// Update updates a user's active status within a tenant.
+// Blocks deactivating the last active school_admin in the tenant.
 func (s *Service) Update(tenantID, userID string, isActive *bool) (*models.User, error) {
 	var user models.User
 	if err := s.db.Where("id = ? AND tenant_id = ?", userID, tenantID).First(&user).Error; err != nil {
@@ -218,6 +277,11 @@ func (s *Service) Update(tenantID, userID string, isActive *bool) (*models.User,
 	}
 
 	if isActive != nil {
+		if !*isActive && user.Role == models.RoleSchoolAdmin && user.IsActive {
+			if err := s.ensureNotLastAdmin(tenantID, user.ID); err != nil {
+				return nil, err
+			}
+		}
 		if err := s.db.Model(&user).Update("is_active", *isActive).Error; err != nil {
 			return nil, fmt.Errorf("update user: %w", err)
 		}
@@ -227,13 +291,40 @@ func (s *Service) Update(tenantID, userID string, isActive *bool) (*models.User,
 }
 
 // Delete removes a user from a tenant.
+// Blocks removing the last active school_admin in the tenant.
 func (s *Service) Delete(tenantID, userID string) error {
-	result := s.db.Where("id = ? AND tenant_id = ?", userID, tenantID).Delete(&models.User{})
-	if result.Error != nil {
-		return fmt.Errorf("delete user: %w", result.Error)
+	var user models.User
+	if err := s.db.Where("id = ? AND tenant_id = ?", userID, tenantID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("get user: %w", err)
 	}
-	if result.RowsAffected == 0 {
-		return ErrUserNotFound
+
+	if user.Role == models.RoleSchoolAdmin && user.IsActive {
+		if err := s.ensureNotLastAdmin(tenantID, user.ID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.db.Delete(&user).Error; err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	return nil
+}
+
+// ensureNotLastAdmin returns ErrLastAdminProtected if removing/deactivating
+// the given admin would leave the tenant with zero active school_admins.
+func (s *Service) ensureNotLastAdmin(tenantID, excludeUserID string) error {
+	var count int64
+	if err := s.db.Model(&models.User{}).
+		Where("tenant_id = ? AND role = ? AND is_active = true AND id <> ?",
+			tenantID, models.RoleSchoolAdmin, excludeUserID).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("count remaining admins: %w", err)
+	}
+	if count == 0 {
+		return ErrLastAdminProtected
 	}
 	return nil
 }
@@ -248,6 +339,59 @@ func (s *Service) Me(userID string) (*models.User, error) {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &user, nil
+}
+
+// UpdateMe updates the authenticated user's first/last name.
+func (s *Service) UpdateMe(userID, firstName, lastName string) (*models.User, error) {
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	updates := map[string]any{}
+	if firstName != "" {
+		updates["first_name"] = firstName
+	}
+	if lastName != "" {
+		updates["last_name"] = lastName
+	}
+	if len(updates) == 0 {
+		return &user, nil
+	}
+
+	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("update profile: %w", err)
+	}
+	user.PasswordHash = ""
+	return &user, nil
+}
+
+// ChangePassword verifies the current password and sets a new one.
+func (s *Service) ChangePassword(userID, currentPassword, newPassword string) error {
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrCurrentPasswordWrong
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	if err := s.db.Model(&user).Update("password_hash", string(hash)).Error; err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	return nil
 }
 
 func generateToken() (string, error) {

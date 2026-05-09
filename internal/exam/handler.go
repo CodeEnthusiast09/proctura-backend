@@ -213,37 +213,6 @@ func (h *Handler) GetAvailableExams(c *gin.Context) {
 	response.OK(c, "available exams retrieved", exams)
 }
 
-type releaseResultsRequest struct {
-	Released bool `json:"released"`
-}
-
-func (h *Handler) ReleaseResults(c *gin.Context) {
-	tenantID := c.GetString("tenantID")
-	examID := c.Param("id")
-
-	var req releaseResultsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
-
-	exam, err := h.svc.ReleaseResults(tenantID, examID, req.Released)
-	if err != nil {
-		if errors.Is(err, ErrExamNotFound) {
-			response.NotFound(c, err.Error())
-			return
-		}
-		response.InternalError(c, "failed to update results release status")
-		return
-	}
-
-	msg := "results released"
-	if !req.Released {
-		msg = "results hidden"
-	}
-	response.OK(c, msg, exam)
-}
-
 func (h *Handler) GetResults(c *gin.Context) {
 	tenantID := c.GetString("tenantID")
 	examID := c.Param("id")

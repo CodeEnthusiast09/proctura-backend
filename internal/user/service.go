@@ -313,6 +313,57 @@ func (s *Service) Delete(tenantID, userID string) error {
 	return nil
 }
 
+// BulkUpdateActive sets is_active on every user in the tenant whose ID is
+// in the list. All-or-nothing: if any pending change would leave the tenant
+// with zero active school_admins, the whole batch is rejected and nothing
+// is written. Empty IDs are silently ignored.
+func (s *Service) BulkUpdateActive(tenantID string, userIDs []string, isActive bool) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	var users []models.User
+	if err := s.db.Where("tenant_id = ? AND id IN ?", tenantID, userIDs).
+		Find(&users).Error; err != nil {
+		return fmt.Errorf("load users: %w", err)
+	}
+	if len(users) == 0 {
+		return ErrUserNotFound
+	}
+
+	// Last-admin protection only matters when deactivating: count how many
+	// currently-active school_admins are NOT in this batch. If the batch
+	// would deactivate every active admin and none would remain, reject.
+	if !isActive {
+		var remaining int64
+		if err := s.db.Model(&models.User{}).
+			Where("tenant_id = ? AND role = ? AND is_active = true AND id NOT IN ?",
+				tenantID, models.RoleSchoolAdmin, userIDs).
+			Count(&remaining).Error; err != nil {
+			return fmt.Errorf("count remaining admins: %w", err)
+		}
+		// If there were any active admins in the batch and none survive
+		// outside it, this would lock everyone out.
+		batchHasActiveAdmin := false
+		for _, u := range users {
+			if u.Role == models.RoleSchoolAdmin && u.IsActive {
+				batchHasActiveAdmin = true
+				break
+			}
+		}
+		if batchHasActiveAdmin && remaining == 0 {
+			return ErrLastAdminProtected
+		}
+	}
+
+	if err := s.db.Model(&models.User{}).
+		Where("tenant_id = ? AND id IN ?", tenantID, userIDs).
+		Update("is_active", isActive).Error; err != nil {
+		return fmt.Errorf("bulk update is_active: %w", err)
+	}
+	return nil
+}
+
 // ensureNotLastAdmin returns ErrLastAdminProtected if removing/deactivating
 // the given admin would leave the tenant with zero active school_admins.
 func (s *Service) ensureNotLastAdmin(tenantID, excludeUserID string) error {

@@ -285,6 +285,42 @@ func (h *Handler) Update(c *gin.Context) {
 	response.OK(c, "user updated", user)
 }
 
+// BulkUpdateActive godoc
+// PATCH /users/bulk-active
+type bulkActiveRequest struct {
+	IDs      []string `json:"ids" binding:"required,min=1,dive,uuid"`
+	IsActive bool     `json:"is_active"`
+}
+
+func (h *Handler) BulkUpdateActive(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+
+	var req bulkActiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.svc.BulkUpdateActive(tenantID, req.IDs, req.IsActive); err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		if errors.Is(err, ErrLastAdminProtected) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to update users")
+		return
+	}
+
+	msg := "users activated"
+	if !req.IsActive {
+		msg = "users deactivated"
+	}
+	response.OK(c, msg, gin.H{"updated": len(req.IDs)})
+}
+
 // Delete godoc
 // DELETE /users/:id
 func (h *Handler) Delete(c *gin.Context) {

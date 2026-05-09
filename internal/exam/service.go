@@ -163,23 +163,6 @@ func (s *Service) GetAvailableExams(tenantID, studentID string) ([]models.Exam, 
 	return exams, nil
 }
 
-// ReleaseResults toggles the results_released flag for an exam.
-func (s *Service) ReleaseResults(tenantID, examID string, released bool) (*models.Exam, error) {
-	var exam models.Exam
-	if err := s.db.Where("id = ? AND tenant_id = ?", examID, tenantID).First(&exam).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrExamNotFound
-		}
-		return nil, fmt.Errorf("get exam: %w", err)
-	}
-
-	if err := s.db.Model(&exam).Update("results_released", released).Error; err != nil {
-		return nil, fmt.Errorf("update results_released: %w", err)
-	}
-
-	return &exam, nil
-}
-
 // GetResults returns all submissions for an exam (lecturer view).
 func (s *Service) GetResults(tenantID, examID string) ([]models.Submission, error) {
 	var exam models.Exam

@@ -91,7 +91,6 @@ type Exam struct {
 	LanguageID      int        `gorm:"not null" json:"language_id"` // Judge0 language ID
 	LanguageName    string     `gorm:"not null" json:"language_name"`
 	Status          ExamStatus `gorm:"type:varchar(20);default:'draft'" json:"status"`
-	ResultsReleased bool       `gorm:"default:false" json:"results_released"`
 	CreatedAt       time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 

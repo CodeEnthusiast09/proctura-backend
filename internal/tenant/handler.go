@@ -105,6 +105,36 @@ func (h *Handler) Update(c *gin.Context) {
 	response.OK(c, "school updated", tenant)
 }
 
+// BulkUpdateActive godoc
+// PATCH /admin/tenants/bulk-active
+type bulkActiveRequest struct {
+	IDs      []string `json:"ids" binding:"required,min=1,dive,uuid"`
+	IsActive bool     `json:"is_active"`
+}
+
+func (h *Handler) BulkUpdateActive(c *gin.Context) {
+	var req bulkActiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.svc.BulkUpdateActive(req.IDs, req.IsActive); err != nil {
+		if errors.Is(err, ErrTenantNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to update schools")
+		return
+	}
+
+	msg := "schools activated"
+	if !req.IsActive {
+		msg = "schools deactivated"
+	}
+	response.OK(c, msg, gin.H{"updated": len(req.IDs)})
+}
+
 // Delete godoc
 // DELETE /tenants/:id
 func (h *Handler) Delete(c *gin.Context) {

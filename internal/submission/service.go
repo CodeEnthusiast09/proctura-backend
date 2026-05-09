@@ -369,20 +369,12 @@ func (s *Service) GetMySubmission(examID, studentID string) (*models.Submission,
 // GetResult returns a submission with all answers and scores.
 func (s *Service) GetResult(submissionID, studentID string) (*models.Submission, error) {
 	var sub models.Submission
-	if err := s.db.Preload("Answers").Preload("Exam").
+	if err := s.db.Preload("Answers").
 		First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSubmissionNotFound
 		}
 		return nil, fmt.Errorf("get submission: %w", err)
-	}
-
-	if sub.Exam != nil && !sub.Exam.ResultsReleased {
-		sub.TotalScore = 0
-		sub.MaxScore = 0
-		for i := range sub.Answers {
-			sub.Answers[i].Score = 0
-		}
 	}
 
 	return &sub, nil

@@ -59,6 +59,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	{
 		superAdmin.POST("/tenants", h.Tenant.Create)
 		superAdmin.GET("/tenants", h.Tenant.List)
+		superAdmin.PATCH("/tenants/bulk-active", h.Tenant.BulkUpdateActive)
 		superAdmin.PUT("/tenants/:id", h.Tenant.Update)
 		superAdmin.DELETE("/tenants/:id", h.Tenant.Delete)
 		// Recovery: invite a school admin into any tenant
@@ -90,6 +91,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		adminRoutes.POST("/users/invite-lecturer", h.User.InviteLecturer)
 		adminRoutes.POST("/users/invite-student", h.User.InviteStudent)
 		adminRoutes.POST("/users/import-students", h.User.ImportStudents)
+		adminRoutes.PATCH("/users/bulk-active", h.User.BulkUpdateActive)
 		adminRoutes.PUT("/users/:id", h.User.Update)
 		adminRoutes.DELETE("/users/:id", h.User.Delete)
 	}
@@ -124,7 +126,6 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		lecturerRoutes.PUT("/exams/:id", h.Exam.UpdateExam)
 		lecturerRoutes.PATCH("/exams/:id/status", h.Exam.UpdateExamStatus)
 		lecturerRoutes.DELETE("/exams/:id", h.Exam.DeleteExam)
-		lecturerRoutes.PATCH("/exams/:id/release-results", h.Exam.ReleaseResults)
 		lecturerRoutes.PATCH("/submissions/:id/answers/:answerId/score", h.Submission.OverrideAnswerScore)
 
 		// Questions

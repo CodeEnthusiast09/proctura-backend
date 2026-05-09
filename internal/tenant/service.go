@@ -133,6 +133,24 @@ func (s *Service) Update(id string, name string, isActive *bool) (*models.Tenant
 	return &tenant, nil
 }
 
+// BulkUpdateActive sets is_active on every tenant whose ID is in the list.
+// Used by super_admin to (de)activate multiple schools in one action.
+func (s *Service) BulkUpdateActive(tenantIDs []string, isActive bool) error {
+	if len(tenantIDs) == 0 {
+		return nil
+	}
+	result := s.db.Model(&models.Tenant{}).
+		Where("id IN ?", tenantIDs).
+		Update("is_active", isActive)
+	if result.Error != nil {
+		return fmt.Errorf("bulk update tenants: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrTenantNotFound
+	}
+	return nil
+}
+
 func (s *Service) Delete(id string) error {
 	result := s.db.Delete(&models.Tenant{}, "id = ?", id)
 	if result.Error != nil {

@@ -42,6 +42,7 @@ func NewTestDB(t *testing.T) *gorm.DB {
 		&models.Tenant{},
 		&models.User{},
 		&models.Course{},
+		&models.CourseEnrollment{},
 		&models.Exam{},
 		&models.Question{},
 		&models.TestCase{},
@@ -60,6 +61,7 @@ func CleanupTables(t *testing.T, db *gorm.DB) {
 	tables := []string{
 		"submission_answers",
 		"submissions",
+		"course_enrollments",
 		"test_cases",
 		"questions",
 		"exams",

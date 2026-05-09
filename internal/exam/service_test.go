@@ -171,7 +171,7 @@ func TestGetAvailableExams_ReturnsOnlyActiveWindow(t *testing.T) {
 
 	now := time.Now()
 
-	// Exam currently active and scheduled
+	// Exam currently active (status = active is the gate for the available list).
 	active, _ := svc.CreateExam(exam.CreateExamInput{
 		TenantID:        tenantID,
 		CourseID:        courseID,
@@ -182,7 +182,7 @@ func TestGetAvailableExams_ReturnsOnlyActiveWindow(t *testing.T) {
 		LanguageID:      71,
 		LanguageName:    "Python 3",
 	})
-	_, err := svc.UpdateExam(tenantID, active.ID, map[string]any{"status": "scheduled"})
+	_, err := svc.UpdateExam(tenantID, active.ID, map[string]any{"status": "active"})
 	require.NoError(t, err)
 
 	// Exam in the future — not available yet

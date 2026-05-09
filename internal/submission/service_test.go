@@ -49,7 +49,8 @@ func seedExamFixtures(t *testing.T, db *gorm.DB) (tenantID, examID, studentID st
 		EndsAt:          now.Add(90 * time.Minute),
 		LanguageID:      71,
 		LanguageName:    "Python 3",
-		Status:          models.ExamStatusScheduled,
+		// StartExam requires the exam status to be active.
+		Status: models.ExamStatusActive,
 	}
 	require.NoError(t, db.Create(&exam).Error)
 
@@ -64,6 +65,14 @@ func seedExamFixtures(t *testing.T, db *gorm.DB) (tenantID, examID, studentID st
 		IsVerified:   true,
 	}
 	require.NoError(t, db.Create(&student).Error)
+
+	// Enroll the student in the course — StartExam requires it.
+	enrollment := models.CourseEnrollment{
+		TenantID:  tenant.ID,
+		CourseID:  course.ID,
+		StudentID: student.ID,
+	}
+	require.NoError(t, db.Create(&enrollment).Error)
 
 	return tenant.ID, exam.ID, student.ID
 }

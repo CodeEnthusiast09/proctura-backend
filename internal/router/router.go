@@ -94,9 +94,21 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		adminRoutes.DELETE("/users/:id", h.User.Delete)
 	}
 
-	// Lecturer routes
+	// Staff read-only views (both school_admin and lecturer can see results,
+	// enrollments, submission detail). school_admin is view-only on academic
+	// content — they don't author courses or exams.
+	staffRoutes := tenantRoutes.Group("")
+	staffRoutes.Use(middleware.RequireRole("school_admin", "lecturer"))
+	{
+		staffRoutes.GET("/courses/:id/enrollments", h.Course.ListEnrollments)
+		staffRoutes.GET("/exams/:id/results", h.Exam.GetResults)
+		staffRoutes.GET("/results", h.Submission.GetAllResults)
+		staffRoutes.GET("/submissions/:id", h.Submission.GetSubmissionDetail)
+	}
+
+	// Lecturer routes — write operations on academic content
 	lecturerRoutes := tenantRoutes.Group("")
-	lecturerRoutes.Use(middleware.RequireRole("school_admin", "lecturer"))
+	lecturerRoutes.Use(middleware.RequireRole("lecturer"))
 	{
 		// Courses
 		lecturerRoutes.POST("/courses", h.Course.Create)
@@ -106,17 +118,13 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		// Enrollments
 		lecturerRoutes.POST("/courses/:id/enroll", h.Course.Enroll)
 		lecturerRoutes.DELETE("/courses/:id/enrollments/:studentId", h.Course.Unenroll)
-		lecturerRoutes.GET("/courses/:id/enrollments", h.Course.ListEnrollments)
 
 		// Exams
 		lecturerRoutes.POST("/exams", h.Exam.CreateExam)
 		lecturerRoutes.PUT("/exams/:id", h.Exam.UpdateExam)
 		lecturerRoutes.PATCH("/exams/:id/status", h.Exam.UpdateExamStatus)
 		lecturerRoutes.DELETE("/exams/:id", h.Exam.DeleteExam)
-		lecturerRoutes.GET("/exams/:id/results", h.Exam.GetResults)
 		lecturerRoutes.PATCH("/exams/:id/release-results", h.Exam.ReleaseResults)
-		lecturerRoutes.GET("/results", h.Submission.GetAllResults)
-		lecturerRoutes.GET("/submissions/:id", h.Submission.GetSubmissionDetail)
 		lecturerRoutes.PATCH("/submissions/:id/answers/:answerId/score", h.Submission.OverrideAnswerScore)
 
 		// Questions

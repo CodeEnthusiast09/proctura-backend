@@ -4,10 +4,10 @@ import "encoding/json"
 
 // Task type identifiers — used by both client (enqueue) and server (process).
 const (
-	TypeSendInvite             = "email:send_invite"
-	TypeSendPasswordReset      = "email:send_password_reset"
-	TypeSendLoginNotification  = "email:send_login_notification"
-	TypeGradeSubmission        = "submission:grade"
+	TypeSendInvite            = "email:send_invite"
+	TypeSendPasswordReset     = "email:send_password_reset"
+	TypeSendLoginNotification = "email:send_login_notification"
+	TypeGradeSubmission       = "submission:grade"
 )
 
 // SendInvitePayload carries the data needed to render and send an invite email.

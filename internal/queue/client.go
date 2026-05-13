@@ -30,39 +30,42 @@ func (q *Client) Close() error {
 
 // EnqueueSendInvite queues an invite email for delivery.
 func (q *Client) EnqueueSendInvite(p SendInvitePayload) error {
-	return q.enqueue(TypeSendInvite, p)
+	return q.enqueue(TypeSendInvite, QueueDefault, p)
 }
 
 // EnqueueSendPasswordReset queues a password-reset email.
 func (q *Client) EnqueueSendPasswordReset(p SendPasswordResetPayload) error {
-	return q.enqueue(TypeSendPasswordReset, p)
+	return q.enqueue(TypeSendPasswordReset, QueueDefault, p)
 }
 
 // EnqueueSendLoginNotification queues a login notification email.
 func (q *Client) EnqueueSendLoginNotification(p SendLoginNotificationPayload) error {
-	return q.enqueue(TypeSendLoginNotification, p)
+	return q.enqueue(TypeSendLoginNotification, QueueDefault, p)
 }
 
 // EnqueueGradeSubmission queues a submission for grading via Judge0.
 func (q *Client) EnqueueGradeSubmission(submissionID string) error {
-	return q.enqueue(TypeGradeSubmission, GradeSubmissionPayload{SubmissionID: submissionID})
+	return q.enqueue(TypeGradeSubmission, QueueCritical, GradeSubmissionPayload{SubmissionID: submissionID})
 }
 
 type marshaler interface {
 	Marshal() ([]byte, error)
 }
 
-func (q *Client) enqueue(taskType string, payload marshaler) error {
+func (q *Client) enqueue(taskType, queueName string, payload marshaler) error {
 	body, err := payload.Marshal()
 	if err != nil {
 		return fmt.Errorf("marshal task payload: %w", err)
 	}
+
 	task := asynq.NewTask(taskType, body)
 	if _, err := q.c.Enqueue(task,
+		asynq.Queue(queueName),
 		asynq.MaxRetry(3),
 		asynq.Timeout(2*time.Minute),
 	); err != nil {
 		return fmt.Errorf("enqueue %s: %w", taskType, err)
 	}
+
 	return nil
 }

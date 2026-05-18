@@ -100,7 +100,6 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	adminRoutes := tenantRoutes.Group("")
 	adminRoutes.Use(middleware.RequireRole("school_admin"))
 	{
-		adminRoutes.GET("/dashboard", h.Dashboard.SchoolAdmin)
 		// User management
 		adminRoutes.GET("/users", h.User.List)
 		adminRoutes.POST("/users/invite-admin", h.User.InviteAdmin)
@@ -118,6 +117,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	staffRoutes := tenantRoutes.Group("")
 	staffRoutes.Use(middleware.RequireRole("school_admin", "lecturer"))
 	{
+		staffRoutes.GET("/dashboard", h.Dashboard.Staff)
 		staffRoutes.GET("/courses/:id/enrollments", h.Course.ListEnrollments)
 		staffRoutes.GET("/exams/:id/results", h.Exam.GetResults)
 		staffRoutes.GET("/exams/:id/analytics", h.Exam.GetAnalytics)
@@ -129,7 +129,6 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	lecturerRoutes := tenantRoutes.Group("")
 	lecturerRoutes.Use(middleware.RequireRole("lecturer"))
 	{
-		lecturerRoutes.GET("/dashboard", h.Dashboard.Lecturer)
 		// Courses
 		lecturerRoutes.POST("/courses", h.Course.Create)
 		lecturerRoutes.PUT("/courses/:id", h.Course.Update)

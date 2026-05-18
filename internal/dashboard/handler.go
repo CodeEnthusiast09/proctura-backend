@@ -13,29 +13,33 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) Lecturer(c *gin.Context) {
+// Staff handles GET /dashboard for both school_admin and lecturer.
+// Role is read from the JWT claims set by the auth middleware.
+func (h *Handler) Staff(c *gin.Context) {
+	role := c.GetString("role")
 	tenantID := c.GetString("tenantID")
 	userID := c.GetString("userID")
 
-	data, err := h.svc.GetLecturerDashboard(tenantID, userID)
-	if err != nil {
-		response.InternalError(c, "failed to load dashboard")
-		return
+	switch role {
+	case "lecturer":
+		data, err := h.svc.GetLecturerDashboard(tenantID, userID)
+		if err != nil {
+			response.InternalError(c, "failed to load dashboard")
+			return
+		}
+		response.OK(c, "dashboard retrieved", data)
+
+	case "school_admin":
+		data, err := h.svc.GetSchoolAdminDashboard(tenantID)
+		if err != nil {
+			response.InternalError(c, "failed to load dashboard")
+			return
+		}
+		response.OK(c, "dashboard retrieved", data)
+
+	default:
+		response.Forbidden(c, "access denied")
 	}
-
-	response.OK(c, "dashboard retrieved", data)
-}
-
-func (h *Handler) SchoolAdmin(c *gin.Context) {
-	tenantID := c.GetString("tenantID")
-
-	data, err := h.svc.GetSchoolAdminDashboard(tenantID)
-	if err != nil {
-		response.InternalError(c, "failed to load dashboard")
-		return
-	}
-
-	response.OK(c, "dashboard retrieved", data)
 }
 
 func (h *Handler) SuperAdmin(c *gin.Context) {

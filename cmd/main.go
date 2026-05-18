@@ -11,6 +11,7 @@ import (
 	"github.com/CodeEnthusiast09/proctura-backend/internal/cloudinary"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/config"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/dashboard"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/database"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/exam"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/mailer"
@@ -79,6 +80,7 @@ func main() {
 	judge0Client := submission.NewJudge0Client(cfg.Judge0)
 	submissionSvc := submission.NewService(db, judge0Client).
 		WithGradingEnqueuer(queueClient)
+	dashboardSvc := dashboard.NewService(db)
 
 	// Handlers
 	h := router.Handlers{
@@ -88,6 +90,7 @@ func main() {
 		Course:     course.NewHandler(courseSvc),
 		Exam:       exam.NewHandler(examSvc),
 		Submission: submission.NewHandler(submissionSvc, storageRouter),
+		Dashboard:  dashboard.NewHandler(dashboardSvc),
 	}
 
 	if mode := os.Getenv("GIN_MODE"); mode != "" {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/CodeEnthusiast09/proctura-backend/internal/auth"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/course"
+	"github.com/CodeEnthusiast09/proctura-backend/internal/dashboard"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/exam"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/middleware"
 	"github.com/CodeEnthusiast09/proctura-backend/internal/submission"
@@ -24,6 +25,7 @@ type Handlers struct {
 	Course     *course.Handler
 	Exam       *exam.Handler
 	Submission *submission.Handler
+	Dashboard  *dashboard.Handler
 }
 
 func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
@@ -69,6 +71,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	superAdmin.Use(middleware.Authenticate(jwtSecret))
 	superAdmin.Use(middleware.RequireRole("super_admin"))
 	{
+		superAdmin.GET("/dashboard", h.Dashboard.SuperAdmin)
 		superAdmin.POST("/tenants", h.Tenant.Create)
 		superAdmin.GET("/tenants", h.Tenant.List)
 		superAdmin.PATCH("/tenants/bulk-active", h.Tenant.BulkUpdateActive)
@@ -97,6 +100,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	adminRoutes := tenantRoutes.Group("")
 	adminRoutes.Use(middleware.RequireRole("school_admin"))
 	{
+		adminRoutes.GET("/dashboard", h.Dashboard.SchoolAdmin)
 		// User management
 		adminRoutes.GET("/users", h.User.List)
 		adminRoutes.POST("/users/invite-admin", h.User.InviteAdmin)
@@ -116,6 +120,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	{
 		staffRoutes.GET("/courses/:id/enrollments", h.Course.ListEnrollments)
 		staffRoutes.GET("/exams/:id/results", h.Exam.GetResults)
+		staffRoutes.GET("/exams/:id/analytics", h.Exam.GetAnalytics)
 		staffRoutes.GET("/results", h.Submission.GetAllResults)
 		staffRoutes.GET("/submissions/:id", h.Submission.GetSubmissionDetail)
 	}
@@ -124,6 +129,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	lecturerRoutes := tenantRoutes.Group("")
 	lecturerRoutes.Use(middleware.RequireRole("lecturer"))
 	{
+		lecturerRoutes.GET("/dashboard", h.Dashboard.Lecturer)
 		// Courses
 		lecturerRoutes.POST("/courses", h.Course.Create)
 		lecturerRoutes.PUT("/courses/:id", h.Course.Update)

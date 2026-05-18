@@ -185,6 +185,88 @@ func (s *Service) GetResults(tenantID, examID string) ([]models.Submission, erro
 	return submissions, nil
 }
 
+// ── Analytics ────────────────────────────────────────────────────────────────
+
+type ScoreBucket struct {
+	Range string `json:"range"`
+	Count int64  `json:"count"`
+}
+
+type ExamAnalytics struct {
+	TotalSubmissions  int64         `json:"total_submissions"`
+	Graded            int64         `json:"graded"`
+	PassRate          float64       `json:"pass_rate"`
+	AverageScorePct   float64       `json:"average_score_pct"`
+	ScoreDistribution []ScoreBucket `json:"score_distribution"`
+}
+
+func (s *Service) GetAnalytics(tenantID, examID string) (*ExamAnalytics, error) {
+	if err := s.db.Where("id = ? AND tenant_id = ?", examID, tenantID).
+		First(&models.Exam{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrExamNotFound
+		}
+		return nil, fmt.Errorf("get exam: %w", err)
+	}
+
+	type statsRow struct {
+		TotalSubmissions int64
+		Graded           int64
+		AvgScorePct      float64
+		PassRate         float64
+	}
+	var stats statsRow
+	if err := s.db.Raw(`
+		SELECT
+			COUNT(*) as total_submissions,
+			SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END) as graded,
+			COALESCE(AVG(
+				CASE WHEN status = 'graded' AND max_score > 0
+				THEN total_score::float / max_score * 100
+				ELSE NULL END
+			), 0) as avg_score_pct,
+			COALESCE(
+				SUM(CASE WHEN status = 'graded' AND max_score > 0 AND total_score::float / max_score >= 0.5 THEN 1 ELSE 0 END)::float
+				/ NULLIF(SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END), 0) * 100
+			, 0) as pass_rate
+		FROM submissions
+		WHERE exam_id = ? AND tenant_id = ?
+	`, examID, tenantID).Scan(&stats).Error; err != nil {
+		return nil, fmt.Errorf("exam stats: %w", err)
+	}
+
+	var distribution []ScoreBucket
+	if err := s.db.Raw(`
+		SELECT
+			CASE
+				WHEN total_score::float / max_score * 100 <= 20 THEN '0–20%'
+				WHEN total_score::float / max_score * 100 <= 40 THEN '21–40%'
+				WHEN total_score::float / max_score * 100 <= 60 THEN '41–60%'
+				WHEN total_score::float / max_score * 100 <= 80 THEN '61–80%'
+				ELSE '81–100%'
+			END as range,
+			COUNT(*) as count
+		FROM submissions
+		WHERE exam_id = ? AND tenant_id = ? AND status = 'graded' AND max_score > 0
+		GROUP BY 1
+		ORDER BY MIN(total_score::float / max_score)
+	`, examID, tenantID).Scan(&distribution).Error; err != nil {
+		return nil, fmt.Errorf("score distribution: %w", err)
+	}
+
+	if distribution == nil {
+		distribution = []ScoreBucket{}
+	}
+
+	return &ExamAnalytics{
+		TotalSubmissions:  stats.TotalSubmissions,
+		Graded:            stats.Graded,
+		PassRate:          stats.PassRate,
+		AverageScorePct:   stats.AvgScorePct,
+		ScoreDistribution: distribution,
+	}, nil
+}
+
 // ── Question ──────────────────────────────────────────────────────────────────
 
 func (s *Service) AddQuestion(examID, body string, orderIndex, points int) (*models.Question, error) {

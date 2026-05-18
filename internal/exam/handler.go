@@ -230,6 +230,23 @@ func (h *Handler) GetResults(c *gin.Context) {
 	response.OK(c, "results retrieved", submissions)
 }
 
+func (h *Handler) GetAnalytics(c *gin.Context) {
+	tenantID := c.GetString("tenantID")
+	examID := c.Param("id")
+
+	analytics, err := h.svc.GetAnalytics(tenantID, examID)
+	if err != nil {
+		if errors.Is(err, ErrExamNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
+		response.InternalError(c, "failed to get exam analytics")
+		return
+	}
+
+	response.OK(c, "analytics retrieved", analytics)
+}
+
 // ── Question handlers ─────────────────────────────────────────────────────────
 
 type addQuestionRequest struct {

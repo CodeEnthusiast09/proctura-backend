@@ -11,24 +11,15 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o api ./cmd/main.go
+    go build -ldflags="-s -w" -o worker ./cmd/worker
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:3.21
 
-SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
-
-RUN apk add --no-cache ca-certificates tzdata curl
-
-# atlasexec (used by the Go migration runner) calls the `atlas` binary at startup.
-# This installs it to /usr/local/bin/atlas so it's in PATH.
-RUN curl -sSf https://atlasgo.sh | ATLAS_VERSION=v1.1.0 sh
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-COPY --from=builder /app/api .
-COPY migrations/ ./migrations/
+COPY --from=builder /app/worker .
 
-EXPOSE 8080
-
-CMD ["./api"]
+CMD ["./worker"]

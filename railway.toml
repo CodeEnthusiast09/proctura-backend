@@ -1,0 +1,14 @@
+# railway.toml — API service
+# Docs: https://docs.railway.com/reference/config-as-code
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Railway hits this before marking the deployment healthy.
+healthcheckPath = "/status"
+# First deploy runs all migrations + seeds super_admin — give it time.
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

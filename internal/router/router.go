@@ -44,6 +44,10 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 		AllowCredentials: true,
 	}))
 
+	r.GET("/status", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
 	api := r.Group("/api/v1")
 
 	// ── Public auth routes ─────────────────────────────────────────────────────

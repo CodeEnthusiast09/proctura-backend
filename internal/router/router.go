@@ -31,7 +31,7 @@ type Handlers struct {
 func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	r.Use(gin.Recovery())
 
-	allowedOrigins := []string{os.Getenv("APP_BASE_URL")}
+	allowedOrigins := []string{os.Getenv("APP_BASE_URL"), os.Getenv("FRONTEND_URL")}
 	if gin.Mode() != gin.ReleaseMode {
 		allowedOrigins = append(allowedOrigins, "http://localhost:3000", "http://127.0.0.1:3000")
 	}

@@ -31,23 +31,61 @@ func main() {
 	// The API process uses QueueMailer instead — every send is just an enqueue.
 	deliveryMailer := buildDeliveryMailer(cfg)
 
-	// Submission service runs grading inline here — it does NOT enqueue, since
-	// this *is* the consumer. Leaving WithGradingEnqueuer unset means
-	// dispatchGrading would fall back to a goroutine, but the worker calls
-	// GradeSubmission directly so that path is never hit.
+	// The worker consumes grading tasks, but it also now produces them: the
+	// stale sweep marks expired submissions and hands each one off for grading.
+	// Wiring the enqueuer means those go back through the queue, where asynq's
+	// concurrency limit bounds them, instead of dispatchGrading falling back to
+	// one unbounded goroutine per submission. A lab losing power mid-exam would
+	// otherwise fire a Judge0 call for every student at once.
+	queueClient := queue.NewClient(cfg.Redis)
+	defer queueClient.Close()
+
 	judge0Client := submission.NewJudge0Client(cfg.Judge0)
-	submissionSvc := submission.NewService(db, judge0Client)
+	submissionSvc := submission.NewService(db, judge0Client).WithGradingEnqueuer(queueClient)
 
 	mux := queue.NewServeMux()
 	mux.HandleFunc(queue.TypeSendInvite, makeSendInviteHandler(deliveryMailer))
 	mux.HandleFunc(queue.TypeSendPasswordReset, makeSendPasswordResetHandler(deliveryMailer))
 	mux.HandleFunc(queue.TypeSendLoginNotification, makeSendLoginNotificationHandler(deliveryMailer))
 	mux.HandleFunc(queue.TypeGradeSubmission, makeGradeSubmissionHandler(submissionSvc))
+	mux.HandleFunc(queue.TypeSweepStale, makeSweepStaleHandler(submissionSvc))
+
+	scheduler := queue.NewScheduler(cfg.Redis)
+	if _, err := scheduler.Register(
+		"@every "+cfg.Submission.SweepInterval.String(),
+		asynq.NewTask(queue.TypeSweepStale, nil),
+		asynq.Queue(queue.QueueDefault),
+	); err != nil {
+		log.Fatalf("register sweep schedule: %v", err)
+	}
+
+	go func() {
+		log.Printf("[worker] stale-submission sweep every %s", cfg.Submission.SweepInterval)
+		if err := scheduler.Run(); err != nil {
+			log.Fatalf("scheduler run: %v", err)
+		}
+	}()
 
 	srv := queue.NewServer(cfg.Redis)
 	log.Printf("[worker] processing tasks from redis %s", cfg.Redis.Addr)
 	if err := srv.Run(mux); err != nil {
 		log.Fatalf("worker run: %v", err)
+	}
+}
+
+// makeSweepStaleHandler closes out submissions whose exam time ran out but
+// whose browser never submitted them. Carries no payload — the schedule is the
+// only trigger.
+func makeSweepStaleHandler(svc *submission.Service) asynq.HandlerFunc {
+	return func(_ context.Context, _ *asynq.Task) error {
+		swept, err := svc.SweepExpired()
+		if err != nil {
+			return err
+		}
+		if swept > 0 {
+			log.Printf("[sweep] closed out %d expired submission(s)", swept)
+		}
+		return nil
 	}
 }
 

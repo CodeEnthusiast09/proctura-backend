@@ -173,6 +173,57 @@ func (s *Service) Submit(submissionID, studentID string, recordingURL *string) (
 	return &sub, nil
 }
 
+// SweepExpired closes out submissions whose exam time has run out but which
+// were never submitted, because the browser that was meant to submit them went
+// away: a closed tab, a dead battery, a crash, a lab losing power, or a proctor
+// deactivating the student mid-exam.
+//
+// Nothing on the server used to end a submission. The only three things that
+// did were all client-side: the student pressing Submit, the countdown hitting
+// zero, and the third anti-cheat violation. Lose the client and the row sat at
+// in_progress forever, so answers that autosave had already written to the
+// database were never graded and never counted in analytics, which only sums
+// status = 'graded'.
+//
+// The deadline itself was already trusted server-side, since SaveAnswer refuses
+// writes past it. This just acts on it instead of waiting to be asked.
+func (s *Service) SweepExpired() (int, error) {
+	var stale []models.Submission
+	if err := s.db.
+		Select("submissions.*").
+		Joins("JOIN exams ON exams.id = submissions.exam_id").
+		Where("submissions.status = ?", models.SubmissionStatusInProgress).
+		Where("submissions.started_at + (exams.duration_minutes * interval '1 minute') < now()").
+		Find(&stale).Error; err != nil {
+		return 0, fmt.Errorf("find expired submissions: %w", err)
+	}
+
+	swept := 0
+	for _, sub := range stale {
+		// Guard on status inside the UPDATE so a client submitting at the same
+		// moment wins the race and grading is not dispatched twice. RowsAffected
+		// tells us which of the two got there first.
+		res := s.db.Model(&models.Submission{}).
+			Where("id = ? AND status = ?", sub.ID, models.SubmissionStatusInProgress).
+			Updates(map[string]any{
+				"status":         models.SubmissionStatusSubmitted,
+				"submitted_at":   time.Now(),
+				"auto_submitted": true,
+			})
+		if res.Error != nil {
+			return swept, fmt.Errorf("sweep submission %s: %w", sub.ID, res.Error)
+		}
+		if res.RowsAffected == 0 {
+			continue
+		}
+
+		s.dispatchGrading(sub.ID)
+		swept++
+	}
+
+	return swept, nil
+}
+
 // AllResultsFilter holds query parameters for GetAllResults.
 type AllResultsFilter struct {
 	CourseID string
@@ -455,21 +506,11 @@ func (s *Service) OverrideAnswerScore(submissionID, answerID, lecturerID, role s
 	return &sub, nil
 }
 
-// IsInProgress checks whether a submission is still active, used by the handler
-// before issuing a Cloudinary upload signature.
-func (s *Service) IsInProgress(submissionID, studentID string) error {
-	var sub models.Submission
-	if err := s.db.First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {
-		return ErrSubmissionNotFound
-	}
-	if sub.Status != models.SubmissionStatusInProgress {
-		return ErrSubmissionNotActive
-	}
-	return nil
-}
-
 // OwnedByStudent checks only that the submission exists and belongs to the student,
-// without requiring any particular status.
+// without requiring any particular status. GetUploadToken uses this rather than
+// an in-progress check on purpose: the recording is uploaded after the exam has
+// already ended, so requiring in_progress would reject every upload from a
+// student who submitted at the buzzer, and every one from a swept submission.
 func (s *Service) OwnedByStudent(submissionID, studentID string) error {
 	var sub models.Submission
 	if err := s.db.First(&sub, "id = ? AND student_id = ?", submissionID, studentID).Error; err != nil {

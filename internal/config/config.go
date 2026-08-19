@@ -17,6 +17,14 @@ type Config struct {
 	SMTP       SMTPConfig
 	Redis      RedisConfig
 	App        AppConfig
+	Submission SubmissionConfig
+}
+
+type SubmissionConfig struct {
+	// SweepInterval is how often the worker looks for submissions whose exam
+	// time has run out but which were never submitted, because the browser
+	// that was meant to submit them went away.
+	SweepInterval time.Duration
 }
 
 type RedisConfig struct {
@@ -93,6 +101,9 @@ func Load() *Config {
 		JWT: JWTConfig{
 			Secret:     getEnv("JWT_SECRET", "change-this-secret"),
 			Expiration: getEnvDuration("JWT_EXPIRATION", 24*time.Hour),
+		},
+		Submission: SubmissionConfig{
+			SweepInterval: getEnvDuration("SUBMISSION_SWEEP_INTERVAL", 5*time.Minute),
 		},
 		Judge0: Judge0Config{
 			BaseURL: getEnv("JUDGE0_BASE_URL", "https://judge0-ce.p.rapidapi.com"),

@@ -155,9 +155,13 @@ type Submission struct {
 	TotalScore     int              `gorm:"default:0" json:"total_score"`
 	MaxScore       int              `gorm:"default:0" json:"max_score"`
 	ViolationCount int              `gorm:"default:0" json:"violation_count"`
-	RecordingURL   *string          `gorm:"type:text" json:"recording_url,omitempty"`
-	CreatedAt      time.Time        `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt      time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
+	// AutoSubmitted marks a submission closed out by the server sweep rather
+	// than by the student's browser. recording_url alone can't tell them apart,
+	// since it is also null whenever a student denied camera access.
+	AutoSubmitted bool      `gorm:"not null;default:false" json:"auto_submitted"`
+	RecordingURL  *string   `gorm:"type:text" json:"recording_url,omitempty"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	Exam    *Exam              `gorm:"foreignKey:ExamID" json:"exam,omitempty"`
 	Student *User              `gorm:"foreignKey:StudentID" json:"student,omitempty"`

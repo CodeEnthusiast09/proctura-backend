@@ -8,6 +8,9 @@ const (
 	TypeSendPasswordReset     = "email:send_password_reset"
 	TypeSendLoginNotification = "email:send_login_notification"
 	TypeGradeSubmission       = "submission:grade"
+	// TypeSweepStale is scheduled on a fixed interval rather than enqueued in
+	// response to anything, so it carries no payload.
+	TypeSweepStale = "submission:sweep_stale"
 )
 
 // SendInvitePayload carries the data needed to render and send an invite email.

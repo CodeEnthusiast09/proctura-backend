@@ -30,6 +30,21 @@ func NewServer(cfg config.RedisConfig) *asynq.Server {
 	)
 }
 
+// NewScheduler builds an asynq scheduler for tasks that run on a fixed
+// interval rather than in response to a request. asynq holds the schedule in
+// Redis, so running several workers still produces one run per interval
+// instead of one per worker.
+func NewScheduler(cfg config.RedisConfig) *asynq.Scheduler {
+	return asynq.NewScheduler(
+		asynq.RedisClientOpt{
+			Addr:     cfg.Addr,
+			Password: cfg.Password,
+			DB:       cfg.DB,
+		},
+		nil,
+	)
+}
+
 // NewServeMux returns a fresh asynq.ServeMux for handler registration.
 func NewServeMux() *asynq.ServeMux {
 	return asynq.NewServeMux()

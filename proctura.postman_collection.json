@@ -7,6 +7,7 @@
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8080/api/v1", "type": "string" },
+    { "key": "server_url", "value": "http://localhost:8080", "type": "string" },
     { "key": "token", "value": "", "type": "string" },
     { "key": "tenant_subdomain", "value": "unilag", "type": "string" },
     { "key": "tenant_id", "value": "", "type": "string" },
@@ -178,6 +179,26 @@
     {
       "name": "Super Admin — Tenants",
       "item": [
+        {
+          "name": "Super Admin Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "description": "Platform-wide counts for the super_admin dashboard. Not tenant-scoped.",
+            "url": {
+              "raw": "{{base_url}}/admin/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard"
+              ]
+            }
+          }
+        },
         {
           "name": "Create Tenant (School)",
           "event": [
@@ -531,6 +552,48 @@
       "description": "Result and submission views shared between school_admin and lecturer.",
       "item": [
         {
+          "name": "Staff Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "description": "Counts for the school_admin and lecturer dashboard, scoped to the tenant.",
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Exam Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Tenant-Subdomain", "value": "{{tenant_subdomain}}" }
+            ],
+            "description": "Score distribution and per-question breakdown for one exam.",
+            "url": {
+              "raw": "{{base_url}}/exams/{{exam_id}}/analytics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "exams",
+                "{{exam_id}}",
+                "analytics"
+              ]
+            }
+          }
+        },
+        {
           "name": "Get Exam Results",
           "request": {
             "method": "GET",
@@ -650,7 +713,7 @@
           }
         },
         {
-          "name": "Enroll Student",
+          "name": "Enroll Students",
           "request": {
             "method": "POST",
             "header": [
@@ -660,7 +723,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"matric_number\": \"CSC/2020/001\"\n}"
+              "raw": "{\n  \"matric_numbers\": [\"CSC/2020/001\", \"CSC/2020/002\"]\n}"
             },
             "url": { "raw": "{{base_url}}/courses/{{course_id}}/enroll", "host": ["{{base_url}}"], "path": ["courses", "{{course_id}}", "enroll"] }
           }
@@ -903,6 +966,28 @@
             },
             "description": "Manual score override for one answer in a submission. Lecturer-only.",
             "url": { "raw": "{{base_url}}/submissions/{{submission_id}}/answers/{{answer_id}}/score", "host": ["{{base_url}}"], "path": ["submissions", "{{submission_id}}", "answers", "{{answer_id}}", "score"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Server Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Liveness probe. Lives outside /api/v1, so it uses {{server_url}}.",
+            "url": {
+              "raw": "{{server_url}}/status",
+              "host": [
+                "{{server_url}}"
+              ],
+              "path": [
+                "status"
+              ]
+            }
           }
         }
       ]

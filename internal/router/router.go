@@ -72,7 +72,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 
 	// ── Super admin routes (no tenant required) ────────────────────────────────
 	superAdmin := api.Group("/admin")
-	superAdmin.Use(middleware.Authenticate(jwtSecret))
+	superAdmin.Use(middleware.Authenticate(db, jwtSecret))
 	superAdmin.Use(middleware.RequireRole("super_admin"))
 	{
 		superAdmin.GET("/dashboard", h.Dashboard.SuperAdmin)
@@ -88,7 +88,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	// ── Authenticated user (no tenant required) ───────────────────────────────
 	// Profile self-service works for super_admin (no tenant) too.
 	meRoutes := api.Group("/me")
-	meRoutes.Use(middleware.Authenticate(jwtSecret))
+	meRoutes.Use(middleware.Authenticate(db, jwtSecret))
 	{
 		meRoutes.GET("", h.User.Me)
 		meRoutes.PATCH("", h.User.UpdateMe)
@@ -98,7 +98,7 @@ func Setup(r *gin.Engine, h Handlers, db *gorm.DB, jwtSecret string) {
 	// ── Tenant-scoped routes ───────────────────────────────────────────────────
 	tenantRoutes := api.Group("")
 	tenantRoutes.Use(middleware.ResolveTenant(db))
-	tenantRoutes.Use(middleware.Authenticate(jwtSecret))
+	tenantRoutes.Use(middleware.Authenticate(db, jwtSecret))
 
 	// School admin routes
 	adminRoutes := tenantRoutes.Group("")

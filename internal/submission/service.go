@@ -187,6 +187,14 @@ func (s *Service) Submit(submissionID, studentID string, recordingURL *string) (
 //
 // The deadline itself was already trusted server-side, since SaveAnswer refuses
 // writes past it. This just acts on it instead of waiting to be asked.
+//
+// Server-side maintenance only: it takes no caller and queries every tenant on
+// purpose, because there is no student, tenant or request to scope it to. Its
+// one trigger is the schedule in cmd/worker. Do not put it behind an HTTP
+// route. A route has a principal and this has none, so it would let one
+// school's admin mutate every other school's submissions. The usual reason to
+// reach for such a route is the worker not running, and that is the thing to
+// fix instead.
 func (s *Service) SweepExpired() (int, error) {
 	var stale []models.Submission
 	if err := s.db.
